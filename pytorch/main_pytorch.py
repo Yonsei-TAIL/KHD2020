@@ -18,7 +18,13 @@ from nsml.constants import DATASET_PATH, GPU_NUM
 
 IMSIZE = 120, 60
 VAL_RATIO = 0.2
-RANDOM_SEED = 1234
+
+# Seed
+RANDOM_SEED = 44
+torch.manual_seed(RANDOM_SEED)
+torch.cuda.manual_seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+random.seed(RANDOM_SEED)
 
 def bind_model(model):
     def save(dir_name):
