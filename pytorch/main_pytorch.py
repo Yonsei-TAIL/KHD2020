@@ -20,6 +20,8 @@ from PIL import Image
 from collections import defaultdict
 from sklearn.model_selection import train_test_split
 
+from efficientnet_pytorch import EfficientNet
+
 import argparse
 from random import uniform
 from imgaug import augmenters as iaa
@@ -205,12 +207,36 @@ class Sdataset(Dataset):
     def __len__(self):
         return len(self.labels)
 
-def ParserArguments(args):
+def get_current_lr(optimizer):
+    return optimizer.state_dict()['param_groups'][0]['lr']
+
+def lr_update(epoch, args, optimizer):
+    prev_lr = get_current_lr(optimizer)
+    if (epoch + 1) in args.lr_decay_epoch:
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = (prev_lr * 0.1)
+            print("LR Decay : %.7f to %.7f" % (prev_lr, prev_lr * 0.1))
+
+def ParserArguments():
+    args = argparse.ArgumentParser()
+
     # Setting Hyperparameters
-    args.add_argument('--epoch', type=int, default=10)          # epoch 수 설정
+    args.add_argument('--epoch', type=int, default=80)          # epoch 수 설정
     args.add_argument('--batch_size', type=int, default=8)      # batch size 설정
-    args.add_argument('--learning_rate', type=float, default=1e-5)  # learning rate 설정
+    args.add_argument('--learning_rate', type=float, default=1e-4)  # learning rate 설정
+    args.add_argument('--lr_decay_epoch', type=str, default='50,70')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개
+
+    # Network
+    args.add_argument('--network', type=str, default='efficientb4')          # epoch 수 설정
+    args.add_argument('--resume', type=str, default='weights/efficient-b4.pth')          # epoch 수 설정
+
+    # Augmentation
+    args.add_argument('--x_trans_factor', type=float, default=0.1)
+    args.add_argument('--y_trans_factor', type=float, default=0.1)
+    args.add_argument('--rot_factor', type=float, default=30)          # epoch 수 설정
+    args.add_argument('--scale_factor', type=float, default=0.15)          # epoch 수 설정
+
 
     # DO NOT CHANGE (for nsml)
     args.add_argument('--mode', type=str, default='train', help='submit일 때 test로 설정됩니다.')
@@ -218,66 +244,36 @@ def ParserArguments(args):
                       help='fork 명령어를 입력할때의 체크포인트로 설정됩니다. 체크포인트 옵션을 안주면 마지막 wall time 의 model 을 가져옵니다.')
     args.add_argument('--pause', type=int, default=0, help='model 을 load 할때 1로 설정됩니다.')
 
-    config = args.parse_args()
-    return config.epoch, config.batch_size, config.num_classes, config.learning_rate, config.pause, config.mode
-
-
-class SampleModelTorch(nn.Module):
-    def __init__(self, num_classes=4):
-        super(SampleModelTorch, self).__init__()
-        self.layer1 = nn.Sequential(nn.Conv2d(1, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64), nn.ReLU(),
-                                    nn.Conv2d(64, 64, kernel_size=3, padding=1), nn.BatchNorm2d(64),  nn.ReLU(),
-                                    nn.MaxPool2d(kernel_size=2, stride=2))
-        self.layer2 = nn.Sequential(nn.Conv2d(64, 128, kernel_size=3, padding=1), nn.BatchNorm2d(128), nn.ReLU(),
-                                    nn.Conv2d(128, 128, kernel_size=3, padding=1), nn.BatchNorm2d(128), nn.ReLU(),
-                                    nn.MaxPool2d(kernel_size=2, stride=2))
-        self.layer3 = nn.Sequential(nn.Conv2d(128, 256, kernel_size=3, padding=1), nn.BatchNorm2d(256), nn.ReLU(),
-                                    nn.Conv2d(256, 256, kernel_size=3, padding=1), nn.BatchNorm2d(256), nn.ReLU())
-        self.fc = nn.Sequential(nn.Linear(256 * 30 * 15, 2048),
-                                nn.Linear(2048, 128),
-                                nn.Linear(128, num_classes))
-    def forward(self, x):
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = x.reshape(x.size(0), -1)
-        x = self.fc(x)
-        return x
-
-'''
-class PNSDataset(Dataset):
-    def __init(self, x, y):
-        self.len = x.shape[0]
-        self.x_data = torch.from_numpy(x)
-        self.y_data = torch.from_numpy(y)
-    def __getitem__(self, index):
-        return self.x_data[index], self.y_data[index]
-    def __len__(self):
-        return self.len
-'''
+    args = args.parse_args()
+    args.lr_decay_epoch = map(int, args.lr_decay_epoch.split(','))
+    return args
 
 if __name__ == '__main__':
-    args = argparse.ArgumentParser()
     print(GPU_NUM)
-    nb_epoch, batch_size, num_classes, learning_rate, ifpause, ifmode = ParserArguments(args)
+    args = ParserArguments()
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     #####   Model   #####
-    model = SampleModelTorch(num_classes)
+    model = EfficientNet.from_name('efficientnet-b4')
+    if os.path.exists(args.resume):
+        model.load_state_dict(torch.load(args.resume))
+    model._fc = nn.Linear(model._fc.in_features, args.num_classes)
+
     #model.double()
     model.to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
+    criterion = nn.CrossEntropyLoss(class_weights).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, momentum=0.9)
     #optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     bind_model(model)
 
-    if ifpause:  ## for test mode
+    if args.ifpause:  ## for test mode
         print('Inferring Start ...')
         nsml.paused(scope=locals())
 
-    if ifmode == 'train':  ## for train mode
+    if args.ifmode == 'train':  ## for train mode
         print('Training start ...')
         # 자유롭게 작성
         images, labels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
@@ -289,17 +285,17 @@ if __name__ == '__main__':
         dataset = TensorDataset(torch.from_numpy(images).float(), torch.from_numpy(labels).long())
         subset_size = [len(images) - int(len(images) * VAL_RATIO),int(len(images) * VAL_RATIO)]
         tr_set, val_set = random_split(dataset, subset_size)
-        batch_train = DataLoader(tr_set, batch_size=batch_size, shuffle=True)
+        batch_train = DataLoader(tr_set, batch_size=args.batch_size, shuffle=True)
         batch_val = DataLoader(val_set, batch_size=1, shuffle=False)
 
         #####   Training loop   #####
-        STEP_SIZE_TRAIN = len(images) // batch_size
+        STEP_SIZE_TRAIN = len(images) // args.batch_size
         print('\n\n STEP_SIZE_TRAIN= {}\n\n'.format(STEP_SIZE_TRAIN))
         t0 = time.time()
-        for epoch in range(nb_epoch):
+        for epoch in range(args.nb_epoch):
             t1 = time.time()
             print('Model fitting ...')
-            print('epoch = {} / {}'.format(epoch + 1, nb_epoch))
+            print('epoch = {} / {}'.format(epoch + 1, args.nb_epoch))
             print('check point = {}'.format(epoch))
             a, a_val, tp, tp_val = 0, 0, 0, 0
             for i, (x_tr, y_tr) in enumerate(batch_train):
@@ -325,7 +321,9 @@ if __name__ == '__main__':
             acc = tp / a
             acc_val = tp_val / a_val
             print("  * loss = {}\n  * acc = {}\n  * loss_val = {}\n  * acc_val = {}".format(loss.item(), acc, loss_val.item(), acc_val))
-            nsml.report(summary=True, step=epoch, epoch_total=nb_epoch, loss=loss.item(), acc=acc, val_loss=loss_val.item(), val_acc=acc_val)
+            nsml.report(summary=True, step=epoch, epoch_total=args.nb_epoch, loss=loss.item(), acc=acc, val_loss=loss_val.item(), val_acc=acc_val)
             nsml.save(epoch)
             print('Training time for one epoch : %.1f\n' % (time.time() - t1))
+
+            lr_update(epoch, args, optimizer)
         print('Total training time : %.1f' % (time.time() - t0))
