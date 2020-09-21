@@ -14,6 +14,15 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset, random_split
 import nsml
 from nsml.constants import DATASET_PATH, GPU_NUM
 
+from torch.utils.data import Dataset, DataLoader
+
+from PIL import Image
+from collections import defaultdict
+from sklearn.model_selection import train_test_split
+
+import argparse
+from random import uniform
+from imgaug import augmenters as iaa
 
 
 IMSIZE = 120, 60
@@ -54,24 +63,67 @@ def bind_model(model):
     nsml.bind(save=save, load=load, infer=infer)
 
 
+def image_padding(img_whole):
+    img = np.zeros((600,600))
+    h, w = img_whole.shape
+
+    if (600 - h) != 0:
+        gap = int((600 - h)/2)
+        img[gap:gap+h,:] = img_whole
+    elif (600 - w) != 0:
+        gap = int((600 - w)/2)
+        img[:,gap:gap+w] = img_whole
+    else:
+        img = img_whole
+
+    return img
+
 def DataLoad(imdir):
     impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if all(s in f for s in ['.jpg'])]
-    img = []
-    lb = []
+    l_img_list = defaultdict(list)
+    r_img_list = defaultdict(list)
+
     print('Loading', len(impath), 'images ...')
+
     for i, p in enumerate(impath):
         img_whole = cv2.imread(p, 0)
+        # zero padding
+        img_whole = image_padding(img_whole)
         h, w = img_whole.shape
         h_, w_ = h, w//2
         l_img = img_whole[:, :w_]
         r_img = img_whole[:, w_:2*w_]
         _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
         if l_cls=='0' or l_cls=='1' or l_cls=='2' or l_cls=='3':
-            img.append(l_img);      lb.append(int(l_cls))
+            l_img_list[int(l_cls)].append(l_img)
         if r_cls=='0' or r_cls=='1' or r_cls=='2' or r_cls=='3':
-            img.append(r_img);      lb.append(int(r_cls))
-    print(len(img), 'data with label 0-3 loaded!')
-    return img, lb
+            r_img_list[int(r_cls)].append(r_img)
+    
+    r_img_train, l_img_train = [],[]
+    r_img_val, l_img_val = [],[]
+    r_lb_train, l_lb_train = [],[]
+    r_lb_val, l_lb_val = [],[]
+
+    for i in range(0,4):
+        img_train,img_val, label_train, label_val = train_test_split(l_img_list[i],[i]*len(l_img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
+        
+        l_img_train += img_train
+        l_img_val += img_val
+        l_lb_train += label_train
+        l_lb_val += label_val
+
+        img_train,img_val, label_train,label_val = train_test_split(r_img_list[i],[i]*len(r_img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
+        
+        r_img_train += img_train
+        r_img_val += img_val
+        r_lb_train += label_train
+        r_lb_val += label_val
+
+    print(len(r_img_train)+len(l_img_train), 'Train data with label 0-3 loaded!')
+    print(len(l_img_val)+len(r_img_val), 'Validation data with label 0-3 loaded!')
+
+
+    return l_img_train,l_lb_train,l_img_val,l_lb_val,r_img_train,r_lb_train,r_img_val,r_lb_val
 
 
 def ImagePreprocessing(img):
@@ -85,6 +137,73 @@ def ImagePreprocessing(img):
     print(len(img), 'images processed!')
     return img
 
+
+class Sdataset(Dataset):
+    def __init__(self, images, labels, args, augmentation, left=True):
+        self.images = images
+        self.labels = labels
+        self.args = args
+        self.augmentation = augmentation
+        self.left = left
+        if not left:
+            self.right2left()
+        print ("images:", len((self.images)), "#labels:", len((self.labels)))
+
+    def right2left():
+        imglist = []
+        for img in self.images:
+            imglist.append(cv2.flip(img, 0))
+        self.images = imglist
+    
+    def box_crop(self, img):
+        half_size = self.args.img_size//2
+
+        if self.augmentation:
+            x_margin = int(half_size * uniform(1.0, 1.0+self.args.x_trans_factor))
+            y_margin = int(half_size * uniform(1.0-self.args.y_trans_factor, 1.0 + self.args.y_trans_factor))
+            center_point = (300-x_margin, 300+y_margin)
+        else:
+            x_margin = half_size
+            center_point = (300-x_margin, 300)
+
+        img_box = img[center_point[1]-half_size:center_point[1]+half_size,
+                      center_point[0]-half_size:center_point[0]+half_size]
+
+        return img_box
+
+    def augment_img(self, img):
+        scale_factor = uniform(1-self.args.scale_factor, 1+self.args.scale_factor)
+        rot_factor = uniform(-self.args.rot_factor, self.args.rot_factor)
+
+        seq = iaa.Sequential([
+                iaa.Affine(
+                    scale=(scale_factor, scale_factor),
+                    rotate=rot_factor
+                )
+            ])
+
+        seq_det = seq.to_deterministic()
+        img = seq_det.augment_images(img)
+
+        return img
+
+    def __getitem__(self, index):
+        image = self.images[index]
+        img_box = self.box_crop(image)
+
+        if self.augmentation:
+            img_box = self.augment_img(img_box)
+
+        img_box = img_box[None, ...]
+
+        img_box = torch.tensor(img_box).float()
+
+        label = self.labels[index]
+        
+        return {"image": img_box, "label": label} 
+
+    def __len__(self):
+        return len(self.labels)
 
 def ParserArguments(args):
     # Setting Hyperparameters
