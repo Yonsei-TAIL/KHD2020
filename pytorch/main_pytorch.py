@@ -57,12 +57,6 @@ class AverageMeter(object):
     self.avg = self.sum / self.count
 
 def box_crop(img, args):
-    print("img type before numpy:", type(img))
-    print("img length: ", len(img))
-    img = np.array(img)
-    print("numpy img shape: :", img.shape)
-    img = img[0]
-
     half_size = args.img_size // 2
     x_margin = half_size
     window = args.window
@@ -85,10 +79,7 @@ def bind_model(model, args):
         print('model loaded!')
 
     def infer(data):  ## test mode
-        print(type(data))
-        print("Data length: ", len(data))
         X = box_crop(data, args)
-        print("After box crop shape: ", X.shape)
 
         X = np.array(X)
         X = np.expand_dims(X, axis=1)
