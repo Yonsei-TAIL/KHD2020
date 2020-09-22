@@ -1,2 +1,2 @@
-weights/efficientnet-b3.pth
+*.pth
 setup.py

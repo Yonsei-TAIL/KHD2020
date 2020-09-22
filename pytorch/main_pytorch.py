@@ -109,10 +109,14 @@ def image_padding(img_whole):
 
     return img
 
+
 def DataLoad(imdir):
     impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if all(s in f for s in ['.jpg'])]
-    img_list = defaultdict(list)
 
+    # left_list = defaultdict(list)
+    # right_list = defaultdict(list)
+
+    img_list = defaultdict(list)
     print('Loading', len(impath), 'images ...')
 
     for i, p in enumerate(impath):
@@ -123,14 +127,15 @@ def DataLoad(imdir):
         h_, w_ = h, w//2
         l_img = img_whole[:, :w_]
         r_img = img_whole[:, w_:2*w_]
-        r_img = cv2.flip(r_img, 0) # Flip Right Image to Left
+        r_img = cv2.flip(r_img, 1) # Flip Right Image to Left
 
         _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
+
         if l_cls=='0' or l_cls=='1' or l_cls=='2' or l_cls=='3':
             img_list[int(l_cls)].append(l_img)
         if r_cls=='0' or r_cls=='1' or r_cls=='2' or r_cls=='3':
             img_list[int(r_cls)].append(r_img)
-    
+
     img_train,img_val = [],[]
     lb_train,lb_val = [],[]
 
@@ -152,6 +157,69 @@ def DataLoad(imdir):
 
     return img_train,lb_train,img_val,lb_val
 
+
+def DataLoadDebugging(imdir):
+    impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if
+              all(s in f for s in ['.jpg'])]
+
+    # left_list = defaultdict(list)
+    # right_list = defaultdict(list)
+
+    img_list = defaultdict(list)
+
+    print('Loading', len(impath), 'images ...')
+
+    left_cnts = [0, 0, 0, 0]
+    right_cnts = [0, 0, 0, 0]
+    for i, p in enumerate(impath):
+        img_whole = cv2.imread(p, 0)
+        # zero padding
+        img_whole = image_padding(img_whole)
+        h, w = img_whole.shape
+        h_, w_ = h, w // 2
+        l_img = img_whole[:, :w_]
+        r_img = img_whole[:, w_:2 * w_]
+        r_img = cv2.flip(r_img, 1)  # Flip Right Image to Left
+
+        _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
+
+        if l_cls == '0' or l_cls == '1' or l_cls == '2' or l_cls == '3':
+            img_list[int(l_cls)].append(l_img)
+            left_cnts[int(l_cls)] += 1
+        if r_cls == '0' or r_cls == '1' or r_cls == '2' or r_cls == '3':
+            img_list[int(r_cls)].append(r_img)
+            right_cnts[int(r_cls)] += 1
+
+    for p in impath[:3]:
+        img_whole = cv2.imread(p, 0)
+        _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
+        print(list(img_whole))
+        print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
+
+    print("Left class :", left_cnts)
+    print("Right class :", right_cnts)
+    exit(0)
+    img_train, img_val = [], []
+    lb_train, lb_val = [], []
+
+    for i in range(0, 4):
+        timg, vimg, tlabel, vlabel = train_test_split(img_list[i], [i] * len(img_list[i]), test_size=0.2, shuffle=True,
+                                                      random_state=13241)
+
+        # Down-sampling
+        if i == 0:
+            timg = timg[:400]
+            tlabel = tlabel[:400]
+
+        img_train += timg
+        img_val += vimg
+        lb_train += tlabel
+        lb_val += vlabel
+
+    print(len(img_train), 'Train data with label 0-3 loaded!')
+    print(len(img_val), 'Validation data with label 0-3 loaded!')
+
+    return img_train, lb_train, img_val, lb_val
 
 def ImagePreprocessing(img):
     # 자유롭게 작성
@@ -239,6 +307,7 @@ def ParserArguments():
     args.add_argument('--nb_epoch', type=int, default=30)          # epoch 수 설정
     args.add_argument('--batch_size', type=int, default=32)      # batch size 설정
     args.add_argument('--learning_rate', type=float, default=5e-3)  # learning rate 설정
+    args.add_argument('--wd', type=float, default=1e-4)  # learning rate 설정
     args.add_argument('--lr_decay_epoch', type=str, default='20,25')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개
     args.add_argument('--img_size', type=int, default=224)     
@@ -281,7 +350,7 @@ if __name__ == '__main__':
     # class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
     class_weights = torch.Tensor([1,2,5,10])
     criterion = nn.CrossEntropyLoss(class_weights).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.wd)
 
     bind_model(model, args)
 
@@ -346,6 +415,7 @@ if __name__ == '__main__':
             with torch.no_grad():
                 for j, (x_val, y_val) in enumerate(batch_val):
                     x_val, y_val = x_val.to(device), y_val.to(device)
+
                     pred_val = model(x_val)
                     loss_val = criterion(pred_val, y_val)
                     prob_val, pred_cls_val = torch.max(pred_val, 1)
