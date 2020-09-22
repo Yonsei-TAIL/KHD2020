@@ -190,11 +190,26 @@ def DataLoadDebugging(imdir):
             img_list[int(r_cls)].append(r_img)
             right_cnts[int(r_cls)] += 1
 
-    for p in impath[:3]:
+    img_check = [0,0,0,0]
+    for p in impath:
         img_whole = cv2.imread(p, 0)
         _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
-        print(list(img_whole))
-        print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
+        if (int(l_cls) == 0 or int(r_cls) == 0) and img_check[0] == 0:
+            img_check[0] = 1
+            print(list(img_whole))
+            print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
+        elif (int(l_cls) == 1 or int(r_cls) == 1)  and img_check[1] == 0:
+            img_check[1] = 1
+            print(list(img_whole))
+            print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
+        elif (int(l_cls) == 2 or int(r_cls) == 2)  and img_check[2] == 0:
+            img_check[2] = 1
+            print(list(img_whole))
+            print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
+        elif (int(l_cls) == 3 or int(r_cls) == 3)  and img_check[3] == 0:
+            img_check[3] = 1
+            print(list(img_whole))
+            print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
 
     print("Left class :", left_cnts)
     print("Right class :", right_cnts)
@@ -361,7 +376,7 @@ if __name__ == '__main__':
     if args.mode == 'train':  ## for train mode
         print('Training start ...')
         # 자유롭게 작성
-        timages, tlabels, vimages, vlabels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
+        timages, tlabels, vimages, vlabels = DataLoadDebugging(imdir=os.path.join(DATASET_PATH, 'train'))
         tr_set = Sdataset(timages, tlabels, args, True)
         val_set = Sdataset(vimages, vlabels, args, False)
         batch_train = DataLoader(tr_set, batch_size=args.batch_size, shuffle=True)
