@@ -46,6 +46,7 @@ def LoadTestData(imdir):
         if r_cls == '0' or r_cls == '1' or r_cls == '2' or r_cls == '3':
             fn.append(p);   dir_lr.append('r'); img.append(r_img);      lb.append(r_cls)
     print(len(img), 'test data with label 0-3 loaded!')
+
     return fn, dir_lr, img, lb
 
 

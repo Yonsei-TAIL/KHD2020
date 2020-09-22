@@ -57,6 +57,7 @@ class AverageMeter(object):
     self.avg = self.sum / self.count
 
 def box_crop(img, args):
+    img = np.array(img)
     half_size = args.img_size//2
     x_margin = half_size
     center_point = (300-x_margin, 300)
@@ -139,13 +140,35 @@ def DataLoad(imdir):
     img_train,img_val = [],[]
     lb_train,lb_val = [],[]
 
+    num = len(img_list[1])
+
+    # downsample class 0, upsample class 2,3
+    img_list[0] = random.sample(img_list[0], num)
+
+    class2_remain = (num - len(img_list[2])) % len(img_list[2])
+    class3_remain = (num - len(img_list[2])) % len(img_list[3])
+
+    class2_quot = int((num - len(img_list[2])) / len(img_list[2]))
+    class3_quot = int((num - len(img_list[3])) / len(img_list[3]))
+
+    img_list[2] += img_list[2] * class2_quot
+    img_list[3] += img_list[3] * class3_quot
+
+    img_list[2] += random.sample(img_list[2], class2_remain)
+    img_list[3] += random.sample(img_list[3], class3_remain)
+
+    print(len(img_list[1]))
+    print(len(img_list[2]))
+    print(len(img_list[3]))
+    print(len(img_list[4]))
+
     for i in range(0,4):
         timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
         
         # Down-sampling
-        if i == 0:
-            timg = timg[:400]
-            tlabel = tlabel[:400]
+        # if i == 0:
+        #     timg = timg[:400]
+        #     tlabel = tlabel[:400]
 
         img_train += timg
         img_val += vimg
@@ -194,19 +217,19 @@ def DataLoadDebugging(imdir):
     for p in impath:
         img_whole = cv2.imread(p, 0)
         _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
-        if (int(l_cls) == 0 or int(r_cls) == 0) and img_check[0] == 0:
+        if (str(l_cls) == '0' or str(r_cls) == '0') and img_check[0] == 0:
             img_check[0] = 1
             print(list(img_whole))
             print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
-        elif (int(l_cls) == 1 or int(r_cls) == 1)  and img_check[1] == 0:
+        elif (str(l_cls) == '1' or str(r_cls) == '1')  and img_check[1] == 0:
             img_check[1] = 1
             print(list(img_whole))
             print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
-        elif (int(l_cls) == 2 or int(r_cls) == 2)  and img_check[2] == 0:
+        elif (str(l_cls) == '2' or str(r_cls) == '2')  and img_check[2] == 0:
             img_check[2] = 1
             print(list(img_whole))
             print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
-        elif (int(l_cls) == 3 or int(r_cls) == 3)  and img_check[3] == 0:
+        elif (str(l_cls) == '3' or str(r_cls) == '3')  and img_check[3] == 0:
             img_check[3] = 1
             print(list(img_whole))
             print("Left label : %s | Right label : %s\n" % (l_cls, r_cls))
@@ -267,6 +290,7 @@ class Sdataset(Dataset):
             x_margin = half_size
             center_point = (300-x_margin, 300)
 
+
         img_box = img[center_point[1]-half_size:center_point[1]+half_size,
                       center_point[0]-half_size:center_point[0]+half_size]
 
@@ -294,7 +318,7 @@ class Sdataset(Dataset):
 
         label = self.labels[index]
 
-        if self.augmentation and (label != 0):
+        if self.augmentation and (label != 0 ) and (label != 1):
             img_box = self.augment_img(img_box)
 
         img_box = img_box[None, ...]
@@ -376,7 +400,7 @@ if __name__ == '__main__':
     if args.mode == 'train':  ## for train mode
         print('Training start ...')
         # 자유롭게 작성
-        timages, tlabels, vimages, vlabels = DataLoadDebugging(imdir=os.path.join(DATASET_PATH, 'train'))
+        timages, tlabels, vimages, vlabels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
         tr_set = Sdataset(timages, tlabels, args, True)
         val_set = Sdataset(vimages, vlabels, args, False)
         batch_train = DataLoader(tr_set, batch_size=args.batch_size, shuffle=True)
