@@ -57,7 +57,6 @@ class AverageMeter(object):
     self.avg = self.sum / self.count
 
 def box_crop(img, args):
-    img = np.array(img)
     half_size = args.img_size//2
     x_margin = half_size
     center_point = (300-x_margin, 300)
@@ -77,6 +76,7 @@ def bind_model(model, args):
         print('model loaded!')
 
     def infer(data):  ## test mode
+        data = np.array(data)
         X = box_crop(data, args)
         # X = ImagePreprocessing(data)
         # X = np.array(X)
