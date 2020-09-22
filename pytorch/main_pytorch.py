@@ -57,11 +57,11 @@ class AverageMeter(object):
     self.avg = self.sum / self.count
 
 def box_crop(img, args):
+    img = np.array(img)
     half_size = args.img_size//2
     x_margin = half_size
     center_point = (300-x_margin, 300)
-    img_box = img[center_point[1]-half_size:center_point[1]+half_size,
-                    center_point[0]-half_size:center_point[0]+half_size]
+    img_box = img[center_point[1]-half_size : center_point[1]+half_size, center_point[0]-half_size : center_point[0]+half_size]
 
     return img_box
 
