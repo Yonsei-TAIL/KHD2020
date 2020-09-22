@@ -106,12 +106,12 @@ def DataLoad(imdir):
     lb_train,lb_val = [],[]
 
     for i in range(0,4):
-        img_train,img_val, label_train, label_val = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
+        timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
         
-        img_train += img_train
-        img_val += img_val
-        lb_train += label_train
-        lb_val += label_val
+        img_train += timg
+        img_val += vimg
+        lb_train += tlabel
+        lb_val += vlabel
 
 
     print(len(img_train), 'Train data with label 0-3 loaded!')
@@ -184,7 +184,7 @@ class Sdataset(Dataset):
         img_box = torch.tensor(img_box).float()
         label = self.labels[index]
         
-        return {"image": img_box, "label": label} 
+        return img_box, label 
 
     def __len__(self):
         return len(self.labels)
@@ -203,11 +203,12 @@ def ParserArguments():
     args = argparse.ArgumentParser()
 
     # Setting Hyperparameters
-    args.add_argument('--epoch', type=int, default=80)          # epoch 수 설정
+    args.add_argument('--nb_epoch', type=int, default=80)          # epoch 수 설정
     args.add_argument('--batch_size', type=int, default=8)      # batch size 설정
     args.add_argument('--learning_rate', type=float, default=1e-4)  # learning rate 설정
     args.add_argument('--lr_decay_epoch', type=str, default='50,70')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개
+    args.add_argument('--img_size', type=int, default=224)     
 
     # Network
     args.add_argument('--network', type=str, default='efficientb4')          # epoch 수 설정
@@ -240,6 +241,7 @@ if __name__ == '__main__':
     model = EfficientNet.from_name('efficientnet-b4')
     if os.path.exists(args.resume):
         model.load_state_dict(torch.load(args.resume))
+    model._change_in_channels(1)
     model._fc = nn.Linear(model._fc.in_features, args.num_classes)
 
     #model.double()
@@ -265,7 +267,7 @@ if __name__ == '__main__':
         batch_val = DataLoader(val_set, batch_size=1, shuffle=False)
 
         #####   Training loop   #####
-        STEP_SIZE_TRAIN = len(images) // args.batch_size
+        STEP_SIZE_TRAIN = len(timages) // args.batch_size
         print('\n\n STEP_SIZE_TRAIN= {}\n\n'.format(STEP_SIZE_TRAIN))
         t0 = time.time()
         for epoch in range(args.nb_epoch):
