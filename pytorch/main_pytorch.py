@@ -264,16 +264,16 @@ if __name__ == '__main__':
     model.to(device)
     class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
     criterion = nn.CrossEntropyLoss(class_weights).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, momentum=0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
     #optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     bind_model(model)
 
-    if args.ifpause:  ## for test mode
+    if args.pause:  ## for test mode
         print('Inferring Start ...')
         nsml.paused(scope=locals())
 
-    if args.ifmode == 'train':  ## for train mode
+    if args.mode == 'train':  ## for train mode
         print('Training start ...')
         # 자유롭게 작성
         images, labels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
