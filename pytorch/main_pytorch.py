@@ -57,13 +57,21 @@ class AverageMeter(object):
     self.avg = self.sum / self.count
 
 def box_crop(img, args):
+    print("img type before numpy:", type(img))
+    print("img length: ", len(img))
     img = np.array(img)
-    half_size = args.img_size//2
-    x_margin = half_size
-    center_point = (300-x_margin, 300)
-    img_box = img[center_point[1]-half_size : center_point[1]+half_size, center_point[0]-half_size : center_point[0]+half_size]
+    print("numpy img shape: :", img.shape)
+    img = img[0]
 
-    return img_box
+    half_size = args.img_size // 2
+    x_margin = half_size
+    window = args.window
+    center_point = (300 - x_margin, 300 - window)
+
+    for i, im in enumerate(img):
+        img[i] = im[center_point[1]-half_size : center_point[1]+half_size, center_point[0]-half_size : center_point[0]+half_size]
+
+    return img
 
 def bind_model(model, args):
     def save(dir_name):
@@ -77,12 +85,16 @@ def bind_model(model, args):
         print('model loaded!')
 
     def infer(data):  ## test mode
-        data = np.array(data)
+        print(type(data))
+        print("Data length: ", len(data))
         X = box_crop(data, args)
-        # X = ImagePreprocessing(data)
-        # X = np.array(X)
-        # X = np.expand_dims(X, axis=1)
+        print("After box crop shape: ", X.shape)
+
+        X = np.array(X)
+        X = np.expand_dims(X, axis=1)
         ##### DO NOT CHANGE ORDER OF TEST DATA #####
+
+        #b c h w
         with torch.no_grad():
             X = torch.from_numpy(X).float().to(device)
             pred = model.forward(X)
@@ -140,36 +152,28 @@ def DataLoad(imdir):
     img_train,img_val = [],[]
     lb_train,lb_val = [],[]
 
-    num = len(img_list[1])
 
-    # downsample class 0, upsample class 2,3
-    img_list[0] = random.sample(img_list[0], num)
-
-    class2_remain = (num - len(img_list[2])) % len(img_list[2])
-    class3_remain = (num - len(img_list[2])) % len(img_list[3])
-
-    class2_quot = int((num - len(img_list[2])) / len(img_list[2]))
-    class3_quot = int((num - len(img_list[3])) / len(img_list[3]))
-
-    img_list[2] += img_list[2] * class2_quot
-    img_list[3] += img_list[3] * class3_quot
-
-    img_list[2] += random.sample(img_list[2], class2_remain)
-    img_list[3] += random.sample(img_list[3], class3_remain)
-
-    print(len(img_list[1]))
-    print(len(img_list[2]))
-    print(len(img_list[3]))
-    print(len(img_list[4]))
-
-    for i in range(0,4):
+    for i in [1,0,2,3]:
         timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
-        
+
+        if i == 1:
+            num = len(timg)
+        if i == 0:
+            # downsample class 0, upsample class 2,3
+            timg = random.sample(timg, num)
+            tlabel = [0] * num
+        if i == 2 or i == 3:
+            class_remain = (num - len(timg)) % len(timg)
+            class_quot = int((num - len(timg)) / len(timg))
+            timg += timg * class_quot
+            timg += random.sample(timg, class_remain)
+            tlabel = [i] * num
+
         # Down-sampling
         # if i == 0:
         #     timg = timg[:400]
         #     tlabel = tlabel[:400]
-
+        print("trian class",i,len(timg))
         img_train += timg
         img_val += vimg
         lb_train += tlabel
@@ -277,7 +281,16 @@ class Sdataset(Dataset):
         self.labels = labels
         self.args = args
         self.augmentation = augmentation
-        print ("images:", len((self.images)), "#labels:", len((self.labels)))
+
+        self.window = self.args.window
+        self.mean = np.mean(images)
+        self.std = np.std(images)
+
+        print("images:", len((self.images)), "#labels:", len((self.labels)))
+
+    def z_norm(self, img):
+        # print("img mean: {:.4f}, img std: {:.4f}".format(self.mean, self.std))
+        return (img - self.mean)/self.std
 
     def box_crop(self, img):
         half_size = self.args.img_size//2
@@ -290,9 +303,9 @@ class Sdataset(Dataset):
             x_margin = half_size
             center_point = (300-x_margin, 300)
 
-
-        img_box = img[center_point[1]-half_size:center_point[1]+half_size,
-                      center_point[0]-half_size:center_point[0]+half_size]
+        window = self.window
+        img_box = img[center_point[1]-half_size - window : center_point[1]+half_size - window,
+                      center_point[0]-half_size : center_point[0]+half_size]
 
         return img_box
 
@@ -313,7 +326,8 @@ class Sdataset(Dataset):
         return img
 
     def __getitem__(self, index):
-        image = self.images[index]
+
+        image = self.z_norm(self.images[index])
         img_box = self.box_crop(image)
 
         label = self.labels[index]
@@ -349,7 +363,7 @@ def ParserArguments():
     args.add_argument('--wd', type=float, default=1e-4)  # learning rate 설정
     args.add_argument('--lr_decay_epoch', type=str, default='20,25')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개
-    args.add_argument('--img_size', type=int, default=224)     
+    args.add_argument('--img_size', type=int, default=224)
 
     # Network
     args.add_argument('--network', type=str, default='efficientb4')          
@@ -360,6 +374,7 @@ def ParserArguments():
     args.add_argument('--y_trans_factor', type=float, default=0.15)
     args.add_argument('--rot_factor', type=float, default=30)          
     args.add_argument('--scale_factor', type=float, default=0.15)          
+    args.add_argument('--window', type=int, default=50)
 
 
     # DO NOT CHANGE (for nsml)
@@ -387,8 +402,9 @@ if __name__ == '__main__':
 
     model.to(device)
     # class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
-    class_weights = torch.Tensor([1,2,5,10])
-    criterion = nn.CrossEntropyLoss(class_weights).to(device)
+    #class_weights = torch.Tensor([1,2,5,10])
+    #criterion = nn.CrossEntropyLoss(class_weights).to(device)
+    criterion = nn.CrossEntropyLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.wd)
 
     bind_model(model, args)
