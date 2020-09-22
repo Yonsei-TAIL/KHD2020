@@ -39,7 +39,33 @@ torch.cuda.manual_seed(RANDOM_SEED)
 np.random.seed(RANDOM_SEED)
 random.seed(RANDOM_SEED)
 
-def bind_model(model):
+class AverageMeter(object):
+  """Computes and stores the average and current value"""
+  def __init__(self):
+      self.reset()
+
+  def reset(self):
+    self.val = 0
+    self.avg = 0
+    self.sum = 0
+    self.count = 0
+
+  def update(self, val, n=1):
+    self.val = val
+    self.sum += val * n
+    self.count += n
+    self.avg = self.sum / self.count
+
+def box_crop(img, args):
+    half_size = args.img_size//2
+    x_margin = half_size
+    center_point = (300-x_margin, 300)
+    img_box = img[center_point[1]-half_size:center_point[1]+half_size,
+                    center_point[0]-half_size:center_point[0]+half_size]
+
+    return img_box
+
+def bind_model(model, args):
     def save(dir_name):
         os.makedirs(dir_name, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(dir_name, 'model'))
@@ -51,9 +77,10 @@ def bind_model(model):
         print('model loaded!')
 
     def infer(data):  ## test mode
-        X = ImagePreprocessing(data)
-        X = np.array(X)
-        X = np.expand_dims(X, axis=1)
+        X = box_crop(data, args)
+        # X = ImagePreprocessing(data)
+        # X = np.array(X)
+        # X = np.expand_dims(X, axis=1)
         ##### DO NOT CHANGE ORDER OF TEST DATA #####
         with torch.no_grad():
             X = torch.from_numpy(X).float().to(device)
@@ -110,15 +137,18 @@ def DataLoad(imdir):
     for i in range(0,4):
         timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
         
+        # Down-sampling
+        if i == 0:
+            timg = timg[:400]
+            tlabel = tlabel[:400]
+
         img_train += timg
         img_val += vimg
         lb_train += tlabel
         lb_val += vlabel
 
-
     print(len(img_train), 'Train data with label 0-3 loaded!')
     print(len(img_val), 'Validation data with label 0-3 loaded!')
-
 
     return img_train,lb_train,img_val,lb_val
 
@@ -179,13 +209,14 @@ class Sdataset(Dataset):
         image = self.images[index]
         img_box = self.box_crop(image)
 
-        if self.augmentation:
+        label = self.labels[index]
+
+        if self.augmentation and (label != 0):
             img_box = self.augment_img(img_box)
 
         img_box = img_box[None, ...]
         img_box = torch.tensor(img_box).float()
-        label = self.labels[index]
-        
+
         return img_box, label 
 
     def __len__(self):
@@ -205,22 +236,22 @@ def ParserArguments():
     args = argparse.ArgumentParser()
 
     # Setting Hyperparameters
-    args.add_argument('--nb_epoch', type=int, default=80)          # epoch 수 설정
-    args.add_argument('--batch_size', type=int, default=8)      # batch size 설정
-    args.add_argument('--learning_rate', type=float, default=1e-4)  # learning rate 설정
-    args.add_argument('--lr_decay_epoch', type=str, default='50,70')  # learning rate 설정
+    args.add_argument('--nb_epoch', type=int, default=30)          # epoch 수 설정
+    args.add_argument('--batch_size', type=int, default=32)      # batch size 설정
+    args.add_argument('--learning_rate', type=float, default=5e-3)  # learning rate 설정
+    args.add_argument('--lr_decay_epoch', type=str, default='20,25')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개
     args.add_argument('--img_size', type=int, default=224)     
 
     # Network
-    args.add_argument('--network', type=str, default='efficientb4')          # epoch 수 설정
-    args.add_argument('--resume', type=str, default='weights/efficient-b4.pth')          # epoch 수 설정
+    args.add_argument('--network', type=str, default='efficientb4')          
+    args.add_argument('--resume', type=str, default='weights/efficient-b4.pth')          
 
     # Augmentation
-    args.add_argument('--x_trans_factor', type=float, default=0.1)
-    args.add_argument('--y_trans_factor', type=float, default=0.1)
-    args.add_argument('--rot_factor', type=float, default=30)          # epoch 수 설정
-    args.add_argument('--scale_factor', type=float, default=0.15)          # epoch 수 설정
+    args.add_argument('--x_trans_factor', type=float, default=0.15)
+    args.add_argument('--y_trans_factor', type=float, default=0.15)
+    args.add_argument('--rot_factor', type=float, default=30)          
+    args.add_argument('--scale_factor', type=float, default=0.15)          
 
 
     # DO NOT CHANGE (for nsml)
@@ -246,14 +277,13 @@ if __name__ == '__main__':
     model._change_in_channels(1)
     model._fc = nn.Linear(model._fc.in_features, args.num_classes)
 
-    #model.double()
     model.to(device)
-    class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
+    # class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
+    class_weights = torch.Tensor([1,2,5,10])
     criterion = nn.CrossEntropyLoss(class_weights).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
-    #optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-    bind_model(model)
+    bind_model(model, args)
 
     if args.pause:  ## for test mode
         print('Inferring Start ...')
@@ -262,7 +292,7 @@ if __name__ == '__main__':
     if args.mode == 'train':  ## for train mode
         print('Training start ...')
         # 자유롭게 작성
-        timages, tlabels ,vimages, vlabels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
+        timages, tlabels, vimages, vlabels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
         tr_set = Sdataset(timages, tlabels, args, True)
         val_set = Sdataset(vimages, vlabels, args, False)
         batch_train = DataLoader(tr_set, batch_size=args.batch_size, shuffle=True)
@@ -273,14 +303,16 @@ if __name__ == '__main__':
         print('\n\n STEP_SIZE_TRAIN= {}\n\n'.format(STEP_SIZE_TRAIN))
         t0 = time.time()
 
-        true = []
-        pred = []
-
         for epoch in range(args.nb_epoch):
             t1 = time.time()
             print('Model fitting ...')
             print('epoch = {} / {}'.format(epoch + 1, args.nb_epoch))
             print('check point = {}'.format(epoch))
+
+            ## Training
+            true_labels = []
+            pred_labels = []
+            train_loss = AverageMeter()
             a, a_val, tp, tp_val = 0, 0, 0, 0
             for i, (x_tr, y_tr) in enumerate(batch_train):
                 x_tr, y_tr = x_tr.to(device), y_tr.to(device)
@@ -293,12 +325,24 @@ if __name__ == '__main__':
                 a += y_tr.size(0)
                 tp += (pred_cls == y_tr).sum().item()
 
-                true.extend(list(y_tr.item().detach().cpu()))
-                pred.extend(list(pred_cls.item().detach().cpu()))
+                train_loss.update(loss.item(), len(x_tr))
+                true_labels.extend(list(y_tr.cpu().numpy().astype(int)))
+                pred_labels.extend(list(pred_cls.cpu().numpy().astype(int)))
 
-                if i%100 == 0:
-                    print("  * Iter Loss [{:d}/{:d}] loss = {}".format(i+1, len(batch_train), loss.item()))
+                if i%10 == 0:
+                    print("  * Iter Loss [{:d}/{:d}] loss = {}".format(i+1, len(batch_train), train_loss.avg))
 
+            # train performance
+            acc = tp / a
+            class0_f1, class1_f1, class2_f1, class3_f1 = f1_score(true_labels, pred_labels, average=None)
+            train_weighted_f1 = (class0_f1 + class1_f1*2 + class2_f1*3 + class3_f1*4) / 10.
+            print("  * Train Class1 F1= {:.2f} | Class2 F1 = {:.2f} | Class3 F1 = {:.2f} | Class4 F1 = {:.2f} | Weighted F1 = {:.2f}"\
+                   .format(class0_f1, class1_f1, class2_f1, class3_f1, train_weighted_f1))
+
+            ## Validation
+            val_loss = AverageMeter()
+            true_labels = []
+            pred_labels = []
             with torch.no_grad():
                 for j, (x_val, y_val) in enumerate(batch_val):
                     x_val, y_val = x_val.to(device), y_val.to(device)
@@ -308,23 +352,22 @@ if __name__ == '__main__':
                     a_val += y_val.size(0)
                     tp_val += (pred_cls_val == y_val).sum().item()
 
-            acc = tp / a
+                    val_loss.update(loss_val.item(), len(x_val))
+                    true_labels.extend(list(y_val.cpu().numpy().astype(int)))
+                    pred_labels.extend(list(pred_cls_val.cpu().numpy().astype(int)))
+
+            # validation performance
             acc_val = tp_val / a_val
-
-            # f1 score per class
-            class0_f1, class1_f1, class2_f1, class3_f1 = f1_score(true, pred, average=None)
-
-            weighted_f1 = (class0_f1 + class1_f1*2 + class2_f1*3 + class3_f1*4) / 10.
-
-            print("  * Class1 F1= {:.2f}, Class2 F1 = {}, Class3 F1 = {}, Class4 F1 = {}".format(class4_f0, class1_f1, class2_f1, class3_f1))
-            print("  * Weighted F1 = {} ")
-
-            # acc per class
-            print("  * Class1 acc= {}, Class2 acc = {}, Class3 acc = {}, Class4 acc = {}".format())
+            class0_f1, class1_f1, class2_f1, class3_f1 = f1_score(true_labels, pred_labels, average=None)
+            val_weighted_f1 = (class0_f1 + class1_f1*2 + class2_f1*3 + class3_f1*4) / 10.
+            print("  * Valid Class1 F1= {:.2f} | Class2 F1 = {:.2f} | Class3 F1 = {:.2f} | Class4 F1 = {:.2f} | Weighted F1 = {:.2f}"\
+                   .format(class0_f1, class1_f1, class2_f1, class3_f1, val_weighted_f1))
 
             # total summary
-            print("  * Train loss = {}\n  * Total Train acc = {}\n  * Val loss = {}\n  * Total Val acc = {}".format(loss.item(), acc, loss_val.item(), acc_val))
-            nsml.report(summary=True, step=epoch, epoch_total=args.nb_epoch, loss=loss.item(), acc=acc, val_loss=loss_val.item(), val_acc=acc_val)
+            print("  * Train loss = {:.4f} | Train weighted F1 = {:.4f} | Val loss = {:.4f} | Val weighted F1 = {:.4f}"\
+                    .format(train_loss.avg, train_weighted_f1, val_loss.avg, val_weighted_f1))
+            nsml.report(summary=True, step=epoch, epoch_total=args.nb_epoch,
+                        loss=train_loss.avg, f1=train_weighted_f1, val_loss=val_loss.avg, val_f1=val_weighted_f1)
             nsml.save(epoch)
             print('Training time for one epoch : %.1f\n' % (time.time() - t1))
 
