@@ -316,7 +316,7 @@ if __name__ == '__main__':
 
             weighted_f1 = (class0_f1 + class1_f1*2 + class2_f1*3 + class3_f1*4) / 10.
 
-            print("  * Class1 F1= {:.2f}, Class2 F1 = {}, Class3 F1 = {}, Class4 F1 = {}".format(class1_f1, class2_f1, class3_f1, class4_f1))
+            print("  * Class1 F1= {:.2f}, Class2 F1 = {}, Class3 F1 = {}, Class4 F1 = {}".format(class4_f0, class1_f1, class2_f1, class3_f1))
             print("  * Weighted F1 = {} ")
 
             # acc per class
@@ -329,8 +329,6 @@ if __name__ == '__main__':
             print('Training time for one epoch : %.1f\n' % (time.time() - t1))
 
             # f1 score per class
-
             # acc per class
-
             lr_update(epoch, args, optimizer)
         print('Total training time : %.1f' % (time.time() - t0))
