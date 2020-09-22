@@ -82,8 +82,7 @@ def image_padding(img_whole):
 
 def DataLoad(imdir):
     impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if all(s in f for s in ['.jpg'])]
-    l_img_list = defaultdict(list)
-    r_img_list = defaultdict(list)
+    img_list = defaultdict(list)
 
     print('Loading', len(impath), 'images ...')
 
@@ -95,37 +94,31 @@ def DataLoad(imdir):
         h_, w_ = h, w//2
         l_img = img_whole[:, :w_]
         r_img = img_whole[:, w_:2*w_]
+        r_img = cv2.flip(r_img, 0) # Flip Right Image to Left
+
         _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
         if l_cls=='0' or l_cls=='1' or l_cls=='2' or l_cls=='3':
-            l_img_list[int(l_cls)].append(l_img)
+            img_list[int(l_cls)].append(l_img)
         if r_cls=='0' or r_cls=='1' or r_cls=='2' or r_cls=='3':
-            r_img_list[int(r_cls)].append(r_img)
+            img_list[int(r_cls)].append(r_img)
     
-    r_img_train, l_img_train = [],[]
-    r_img_val, l_img_val = [],[]
-    r_lb_train, l_lb_train = [],[]
-    r_lb_val, l_lb_val = [],[]
+    img_train,img_val = [],[]
+    lb_train,lb_val = [],[]
 
     for i in range(0,4):
-        img_train,img_val, label_train, label_val = train_test_split(l_img_list[i],[i]*len(l_img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
+        img_train,img_val, label_train, label_val = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
         
-        l_img_train += img_train
-        l_img_val += img_val
-        l_lb_train += label_train
-        l_lb_val += label_val
-
-        img_train,img_val, label_train,label_val = train_test_split(r_img_list[i],[i]*len(r_img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
-        
-        r_img_train += img_train
-        r_img_val += img_val
-        r_lb_train += label_train
-        r_lb_val += label_val
-
-    print(len(r_img_train)+len(l_img_train), 'Train data with label 0-3 loaded!')
-    print(len(l_img_val)+len(r_img_val), 'Validation data with label 0-3 loaded!')
+        img_train += img_train
+        img_val += img_val
+        lb_train += label_train
+        lb_val += label_val
 
 
-    return l_img_train,l_lb_train,l_img_val,l_lb_val,r_img_train,r_lb_train,r_img_val,r_lb_val
+    print(len(img_train), 'Train data with label 0-3 loaded!')
+    print(len(img_val), 'Validation data with label 0-3 loaded!')
+
+
+    return img_train,lb_train,img_val,lb_val
 
 
 def ImagePreprocessing(img):
@@ -141,22 +134,13 @@ def ImagePreprocessing(img):
 
 
 class Sdataset(Dataset):
-    def __init__(self, images, labels, args, augmentation, left=True):
+    def __init__(self, images, labels, args, augmentation):
         self.images = images
         self.labels = labels
         self.args = args
         self.augmentation = augmentation
-        self.left = left
-        if not left:
-            self.right2left()
         print ("images:", len((self.images)), "#labels:", len((self.labels)))
 
-    def right2left():
-        imglist = []
-        for img in self.images:
-            imglist.append(cv2.flip(img, 0))
-        self.images = imglist
-    
     def box_crop(self, img):
         half_size = self.args.img_size//2
 
@@ -197,9 +181,7 @@ class Sdataset(Dataset):
             img_box = self.augment_img(img_box)
 
         img_box = img_box[None, ...]
-
         img_box = torch.tensor(img_box).float()
-
         label = self.labels[index]
         
         return {"image": img_box, "label": label} 
@@ -276,15 +258,9 @@ if __name__ == '__main__':
     if args.mode == 'train':  ## for train mode
         print('Training start ...')
         # 자유롭게 작성
-        images, labels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
-        images = ImagePreprocessing(images)
-        images = np.array(images)
-        images = np.expand_dims(images, axis=1)
-        labels = np.array(labels)
-
-        dataset = TensorDataset(torch.from_numpy(images).float(), torch.from_numpy(labels).long())
-        subset_size = [len(images) - int(len(images) * VAL_RATIO),int(len(images) * VAL_RATIO)]
-        tr_set, val_set = random_split(dataset, subset_size)
+        timages, tlabels ,vimages, vlabels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'))
+        tr_set = Sdataset(timages, tlabels, args, True)
+        val_set = Sdataset(vimages, vlabels, args, False)
         batch_train = DataLoader(tr_set, batch_size=args.batch_size, shuffle=True)
         batch_val = DataLoader(val_set, batch_size=1, shuffle=False)
 
@@ -327,3 +303,4 @@ if __name__ == '__main__':
 
             lr_update(epoch, args, optimizer)
         print('Total training time : %.1f' % (time.time() - t0))
+
