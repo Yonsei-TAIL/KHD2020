@@ -19,12 +19,14 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 from collections import defaultdict
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
 
 from efficientnet_pytorch import EfficientNet
 
 import argparse
 from random import uniform
 from imgaug import augmenters as iaa
+
 
 
 IMSIZE = 120, 60
@@ -292,6 +294,10 @@ if __name__ == '__main__':
         STEP_SIZE_TRAIN = len(images) // args.batch_size
         print('\n\n STEP_SIZE_TRAIN= {}\n\n'.format(STEP_SIZE_TRAIN))
         t0 = time.time()
+
+        true = []
+        pred = []
+
         for epoch in range(args.nb_epoch):
             t1 = time.time()
             print('Model fitting ...')
@@ -309,6 +315,12 @@ if __name__ == '__main__':
                 a += y_tr.size(0)
                 tp += (pred_cls == y_tr).sum().item()
 
+                true.extend(list(y_tr.item().detach().cpu()))
+                pred.extend(list(pred_cls.item().detach().cpu()))
+
+                if i%100 == 0:
+                    print("  * Iter Loss [{:d}/{:d}] loss = {}".format(i+1, len(batch_train), loss.item()))
+
             with torch.no_grad():
                 for j, (x_val, y_val) in enumerate(batch_val):
                     x_val, y_val = x_val.to(device), y_val.to(device)
@@ -320,10 +332,28 @@ if __name__ == '__main__':
 
             acc = tp / a
             acc_val = tp_val / a_val
-            print("  * loss = {}\n  * acc = {}\n  * loss_val = {}\n  * acc_val = {}".format(loss.item(), acc, loss_val.item(), acc_val))
+
+            # f1 score per class
+
+            class0_f1, class1_f1, class2_f1, class3_f1 = f1_score(true, pred, average=None)
+
+            weighted_f1 = (class0_f1 + class1_f1*2 + class2_f1*3 + class3_f1*4) / 10.
+
+            print("  * Class1 F1= {:.2f}, Class2 F1 = {}, Class3 F1 = {}, Class4 F1 = {}".format(class1_f1, class2_f1, class3_f1, class4_f1))
+            print("  * Weighted F1 = {} ")
+
+            # acc per class
+            print("  * Class1 acc= {}, Class2 acc = {}, Class3 acc = {}, Class4 acc = {}".format())
+
+            # total summary
+            print("  * Train loss = {}\n  * Total Train acc = {}\n  * Val loss = {}\n  * Total Val acc = {}".format(loss.item(), acc, loss_val.item(), acc_val))
             nsml.report(summary=True, step=epoch, epoch_total=args.nb_epoch, loss=loss.item(), acc=acc, val_loss=loss_val.item(), val_acc=acc_val)
             nsml.save(epoch)
             print('Training time for one epoch : %.1f\n' % (time.time() - t1))
+
+            # f1 score per class
+
+            # acc per class
 
             lr_update(epoch, args, optimizer)
         print('Total training time : %.1f' % (time.time() - t0))
