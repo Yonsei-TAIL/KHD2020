@@ -346,7 +346,7 @@ def ParserArguments():
     args.add_argument('--nb_epoch', type=int, default=30)          # epoch 수 설정
     args.add_argument('--batch_size', type=int, default=32)      # batch size 설정
     args.add_argument('--learning_rate', type=float, default=5e-3)  # learning rate 설정
-    args.add_argument('--wd', type=float, default=1e-4)  # learning rate 설정
+    args.add_argument('--wd', type=float, default=3e-4)  # learning rate 설정
     args.add_argument('--lr_decay_epoch', type=str, default='20,25')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개
     args.add_argument('--img_size', type=int, default=224)
@@ -356,6 +356,7 @@ def ParserArguments():
     # Network
     args.add_argument('--network', type=str, default='efficientnet-b4')
     args.add_argument('--resume', type=str, default='weights/efficient-b4.pth')          
+    args.add_argument('--dropout', type=float, default=0.5)
 
     # Augmentation
     args.add_argument('--x_trans_factor', type=float, default=0.15)
@@ -370,7 +371,8 @@ def ParserArguments():
     args.add_argument('--pause', type=int, default=0, help='model 을 load 할때 1로 설정됩니다.')
 
     args = args.parse_args()
-    args.lr_decay_epoch = map(int, args.lr_decay_epoch.split(','))
+    args.lr_decay_epoch = map(float, args.lr_decay_epoch.split(','))
+
     return args
 
 if __name__ == '__main__':
@@ -393,8 +395,11 @@ if __name__ == '__main__':
         model = resnet34(pretrained=False)
         model.conv1 = nn.Conv2d(1, model.conv1.out_channels, kernel_size=7, stride=2, padding=3,
                                bias=False)
-        model.fc = nn.Linear(model.fc.in_features, args.num_classes)
-
+        #model.fc = nn.Linear(model.fc.in_features, args.num_classes)
+        model.fc = nn.Sequential(
+            nn.Dropout(p=args.dropout),
+            nn.Linear(model.fc.in_features, args.num_classes)
+        )
 
     model.to(device)
     # class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
