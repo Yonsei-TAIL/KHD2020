@@ -26,7 +26,7 @@ def ParserArguments():
 
     # Setting Hyperparameters
     args.add_argument('--nb_epoch', type=int, default=80)          # epoch 수 설정
-    args.add_argument('--batch_size', type=int, default=256)      # batch size 설정
+    args.add_argument('--batch_size', type=int, default=64)      # batch size 설정
     args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
     args.add_argument('--wd', type=float, default=1e-2)  # learning rate 설정
     args.add_argument('--lr_decay_epoch', type=str, default='40,60')  # learning rate 설정
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
     # Loss
     if args.balancing_method == 'weights':
-        class_weights = torch.Tensor([1,3,5,10])
+        class_weights = torch.Tensor([1,4,6,9])
         criterion = nn.CrossEntropyLoss(class_weights).to(device)
     else:
         criterion = nn.CrossEntropyLoss().to(device)
