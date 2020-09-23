@@ -25,23 +25,23 @@ def ParserArguments():
     args = argparse.ArgumentParser()
 
     # Setting Hyperparameters
-    args.add_argument('--nb_epoch', type=int, default=30)          # epoch 수 설정
-    args.add_argument('--batch_size', type=int, default=32)      # batch size 설정
-    args.add_argument('--learning_rate', type=float, default=5e-3)  # learning rate 설정
-    args.add_argument('--wd', type=float, default=3e-4)  # learning rate 설정
-    args.add_argument('--lr_decay_epoch', type=str, default='20,25')  # learning rate 설정
+    args.add_argument('--nb_epoch', type=int, default=80)          # epoch 수 설정
+    args.add_argument('--batch_size', type=int, default=256)      # batch size 설정
+    args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
+    args.add_argument('--wd', type=float, default=1e-2)  # learning rate 설정
+    args.add_argument('--lr_decay_epoch', type=str, default='40,60')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개 (2로 설정시 정상 vs 비정상)
     args.add_argument('--img_size', type=int, default=224) # input crop image size
     args.add_argument('--w_min', type=int, default=50) # Window min
     args.add_argument('--w_max', type=int, default=180) # Window max
-    args.add_argument('--balancing_method', type=str, default='aug', help="'aug' : augmentation / 'weights' : class_weights") # Window max
+    args.add_argument('--balancing_method', type=str, default='weights', help="'aug' : augmentation / 'weights' : class_weights") # Window max
 
     # Network
-    args.add_argument('--network', type=str, default='efficientnet-b4')
+    args.add_argument('--network', type=str, default='resnet34')
     args.add_argument('--dropout', type=float, default=0.5)
 
     # Augmentation
-    args.add_argument('--rot_factor', type=float, default=30)          
+    args.add_argument('--rot_factor', type=float, default=15)          
     args.add_argument('--scale_factor', type=float, default=0.15)          
 
     # DO NOT CHANGE (for nsml)
@@ -51,7 +51,7 @@ def ParserArguments():
     args.add_argument('--pause', type=int, default=0, help='model 을 load 할때 1로 설정됩니다.')
 
     args = args.parse_args()
-    args.lr_decay_epoch = map(float, args.lr_decay_epoch.split(','))
+    args.lr_decay_epoch = list(map(int, args.lr_decay_epoch.split(',')))
 
     return args
 
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 
     # Loss
     if args.balancing_method == 'weights':
-        class_weights = torch.Tensor([1,2,5,10])
+        class_weights = torch.Tensor([1,3,5,10])
         criterion = nn.CrossEntropyLoss(class_weights).to(device)
     else:
         criterion = nn.CrossEntropyLoss().to(device)

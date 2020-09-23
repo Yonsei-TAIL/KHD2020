@@ -29,7 +29,7 @@ def bind_model(model, args):
         X = np.expand_dims(X, axis=1)
         ##### DO NOT CHANGE ORDER OF TEST DATA #####
 
-        #b c h w
+        model.eval()
         with torch.no_grad():
             X = torch.from_numpy(X).float().to(device)
             pred = model.forward(X)
@@ -65,6 +65,7 @@ def load_model(args):
     return model
 
 def train_model(epoch, batch_train, device, optimizer, model, criterion, args):
+    model.train()
     print('Model fitting ...')
     print('epoch = {} / {}'.format(epoch + 1, args.nb_epoch))
     print('check point = {}'.format(epoch))
@@ -109,6 +110,8 @@ def train_model(epoch, batch_train, device, optimizer, model, criterion, args):
 
 
 def valid_model(epoch, batch_val, device, model, criterion, args):
+    model.eval()
+
     val_loss = AverageMeter()
     true_labels = []
     pred_labels = []
