@@ -24,6 +24,8 @@ def bind_model(model, args):
         print('model loaded!')
 
     def infer(data):  ## test mode
+        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        
         X = ImagePreprocessing(data, args)
         X = np.array(X)
         X = np.expand_dims(X, axis=1)
