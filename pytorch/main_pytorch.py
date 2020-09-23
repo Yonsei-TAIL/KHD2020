@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
-#import torchvision
+from torchvision.models import resnet18, resnet34
 #import torchvision.transforms as transforms
 from torch.utils.data import Dataset, DataLoader, TensorDataset, random_split
 
@@ -56,16 +56,6 @@ class AverageMeter(object):
     self.count += n
     self.avg = self.sum / self.count
 
-def box_crop(img, args):
-    half_size = args.img_size // 2
-    x_margin = half_size
-    window = args.window
-    center_point = (300 - x_margin, 300 - window)
-
-    for i, im in enumerate(img):
-        img[i] = im[center_point[1]-half_size : center_point[1]+half_size, center_point[0]-half_size : center_point[0]+half_size]
-
-    return img
 
 def bind_model(model, args):
     def save(dir_name):
@@ -79,8 +69,7 @@ def bind_model(model, args):
         print('model loaded!')
 
     def infer(data):  ## test mode
-        X = box_crop(data, args)
-
+        X = ImagePreprocessing(data, args)
         X = np.array(X)
         X = np.expand_dims(X, axis=1)
         ##### DO NOT CHANGE ORDER OF TEST DATA #####
@@ -97,41 +86,18 @@ def bind_model(model, args):
 
     nsml.bind(save=save, load=load, infer=infer)
 
-
-def image_padding(img_whole):
-    img = np.zeros((600,600))
-    h, w = img_whole.shape
-
-    if (600 - h) != 0:
-        gap = int((600 - h)/2)
-        img[gap:gap+h,:] = img_whole
-    elif (600 - w) != 0:
-        gap = int((600 - w)/2)
-        img[:,gap:gap+w] = img_whole
-    else:
-        img = img_whole
-
-    return img
-
-
 def DataLoad(imdir):
     impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if all(s in f for s in ['.jpg'])]
-
-    # left_list = defaultdict(list)
-    # right_list = defaultdict(list)
 
     img_list = defaultdict(list)
     print('Loading', len(impath), 'images ...')
 
     for i, p in enumerate(impath):
         img_whole = cv2.imread(p, 0)
-        # zero padding
-        img_whole = image_padding(img_whole)
         h, w = img_whole.shape
         h_, w_ = h, w//2
-        r_img = img_whole[:, :w_]
         l_img = img_whole[:, w_:2*w_]
-        r_img = cv2.flip(r_img, 1) # Flip Right Image to Left
+        r_img = img_whole[:, :w_]
 
         _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
 
@@ -164,6 +130,9 @@ def DataLoad(imdir):
         # if i == 0:
         #     timg = timg[:400]
         #     tlabel = tlabel[:400]
+        timg_flip = [cv2.flip(img, 1) for img in timg]
+        timg += timg_flip
+        tlabel = tlabel * 2
         print("trian class",i,len(timg))
         img_train += timg
         img_val += vimg
@@ -179,9 +148,6 @@ def DataLoad(imdir):
 def DataLoadDebugging(imdir):
     impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if
               all(s in f for s in ['.jpg'])]
-
-    # left_list = defaultdict(list)
-    # right_list = defaultdict(list)
 
     img_list = defaultdict(list)
 
@@ -254,14 +220,66 @@ def DataLoadDebugging(imdir):
 
     return img_train, lb_train, img_val, lb_val
 
-def ImagePreprocessing(img):
+def image_padding(img_whole):
+    img = np.zeros((600,300))
+    h, w = img_whole.shape
+
+    if (600 - h) != 0:
+        gap = int((600 - h)/2)
+        img[gap:gap+h,:] = img_whole
+    elif (300 - w) != 0:
+        gap = int((300 - w)/2)
+        img[:,gap:gap+w] = img_whole
+    else:
+        img = img_whole
+
+    return img
+
+def image_windowing(img, w_min=50, w_max=180):
+    img_w = img.copy()
+
+    img_w[img_w < w_min] = w_min
+    img_w[img_w > w_max] = w_max
+
+    return img_w
+
+def image_bg_reduction(img):
+    img_wo_bg = img.copy()
+
+    img_wo_bg[:250] = 0
+    img_wo_bg[500:] = 0
+    img_wo_bg[:, :60] = 0
+    img_wo_bg[:, -60:] = 0
+
+    return img_wo_bg
+
+def image_roi_crop(img, img_size):
+    half_size = img_size // 2
+    return img[350-half_size:350+half_size,
+               150-half_size:150+half_size].copy()
+
+def image_minmax(img, min=50, max=180):
+    img_minmax = ((img - np.min(img)) / (np.max(img) - np.min(img))).copy()
+    img_minmax[img_minmax < 0] = 0
+    img_minmax[img_minmax > 1] = 1
+    return img_minmax
+
+def ImagePreprocessing(img, args):
     # 자유롭게 작성
-    h, w = IMSIZE
     print('Preprocessing ...')
     for i, im, in enumerate(img):
-        tmp = cv2.resize(im, dsize=(w, h), interpolation=cv2.INTER_AREA)
-        tmp = tmp / 255.
-        img[i] = tmp
+        # Zero-padding
+        im = image_padding(im)
+        # Windowing
+        im = image_windowing(im, args.w_min, args.w_max)
+        # Background reduction
+        im = image_bg_reduction(im)
+        # RoI crop
+        im = image_roi_crop(im, args.img_size)
+        # Min-Max scaling
+        im = image_minmax(im, args.w_min, args.w_max)
+
+        img[i] = im
     print(len(img), 'images processed!')
     return img
 
@@ -269,36 +287,17 @@ def ImagePreprocessing(img):
 class Sdataset(Dataset):
     def __init__(self, images, labels, args, augmentation):
         self.images = images
-        self.labels = labels
         self.args = args
+        self._init_images()
+        self.labels = labels
         self.augmentation = augmentation
-
-        self.window = self.args.window
-        self.mean = np.mean(images)
-        self.std = np.std(images)
 
         print("images:", len((self.images)), "#labels:", len((self.labels)))
 
-    def z_norm(self, img):
-        # print("img mean: {:.4f}, img std: {:.4f}".format(self.mean, self.std))
-        return (img - self.mean)/self.std
-
-    def box_crop(self, img):
-        half_size = self.args.img_size//2
-
-        if self.augmentation:
-            x_margin = int(half_size * uniform(1.0, 1.0+self.args.x_trans_factor))
-            y_margin = int(half_size * uniform(1.0-self.args.y_trans_factor, 1.0 + self.args.y_trans_factor))
-            center_point = (300-x_margin, 300+y_margin)
-        else:
-            x_margin = half_size
-            center_point = (300-x_margin, 300)
-
-        window = self.window
-        img_box = img[center_point[1]-half_size - window : center_point[1]+half_size - window,
-                      center_point[0]-half_size : center_point[0]+half_size]
-
-        return img_box
+    def _init_images(self):
+        self.images = ImagePreprocessing(self.images, self.args)
+        self.images = np.array(self.images)
+        self.images = np.expand_dims(self.images, axis=1)
 
     def augment_img(self, img):
         scale_factor = uniform(1-self.args.scale_factor, 1+self.args.scale_factor)
@@ -317,19 +316,15 @@ class Sdataset(Dataset):
         return img
 
     def __getitem__(self, index):
-
-        image = self.z_norm(self.images[index])
-        img_box = self.box_crop(image)
-
+        image = self.images[index]
         label = self.labels[index]
 
-        if self.augmentation and (label != 0 ) and (label != 1):
-            img_box = self.augment_img(img_box)
+        if self.augmentation:
+            image = self.augment_img(image)
 
-        img_box = img_box[None, ...]
-        img_box = torch.tensor(img_box).float()
+        image = torch.tensor(image).float()
 
-        return img_box, label 
+        return image, label
 
     def __len__(self):
         return len(self.labels)
@@ -355,9 +350,11 @@ def ParserArguments():
     args.add_argument('--lr_decay_epoch', type=str, default='20,25')  # learning rate 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개
     args.add_argument('--img_size', type=int, default=224)
+    args.add_argument('--w_min', type=int, default=50)
+    args.add_argument('--w_max', type=int, default=180)
 
     # Network
-    args.add_argument('--network', type=str, default='efficientb4')          
+    args.add_argument('--network', type=str, default='efficientnet-b4')
     args.add_argument('--resume', type=str, default='weights/efficient-b4.pth')          
 
     # Augmentation
@@ -365,8 +362,6 @@ def ParserArguments():
     args.add_argument('--y_trans_factor', type=float, default=0.15)
     args.add_argument('--rot_factor', type=float, default=30)          
     args.add_argument('--scale_factor', type=float, default=0.15)          
-    args.add_argument('--window', type=int, default=50)
-
 
     # DO NOT CHANGE (for nsml)
     args.add_argument('--mode', type=str, default='train', help='submit일 때 test로 설정됩니다.')
@@ -385,11 +380,21 @@ if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     #####   Model   #####
-    model = EfficientNet.from_name('efficientnet-b4')
-    if os.path.exists(args.resume):
-        model.load_state_dict(torch.load(args.resume))
-    model._change_in_channels(1)
-    model._fc = nn.Linear(model._fc.in_features, args.num_classes)
+    if 'efficientnet' in args.network:
+        model = EfficientNet.from_name(args.network)
+        model._change_in_channels(1)
+        model._fc = nn.Linear(model._fc.in_features, args.num_classes)
+    elif args.network == 'resnet18':
+        model = resnet18(pretrained=False)
+        model.conv1 = nn.Conv2d(1, model.conv1.out_channels, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        model.fc = nn.Linear(model.fc.in_features, args.num_classes)
+    elif args.network == 'resnet34':
+        model = resnet34(pretrained=False)
+        model.conv1 = nn.Conv2d(1, model.conv1.out_channels, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        model.fc = nn.Linear(model.fc.in_features, args.num_classes)
+
 
     model.to(device)
     # class_weights = torch.Tensor([1/0.78, 1/0.13, 1/0.06, 1/0.03])
@@ -411,7 +416,7 @@ if __name__ == '__main__':
         tr_set = Sdataset(timages, tlabels, args, True)
         val_set = Sdataset(vimages, vlabels, args, False)
         batch_train = DataLoader(tr_set, batch_size=args.batch_size, shuffle=True)
-        batch_val = DataLoader(val_set, batch_size=1, shuffle=False)
+        batch_val = DataLoader(val_set, batch_size=args.batch_size, shuffle=False)
 
         #####   Training loop   #####
         STEP_SIZE_TRAIN = len(timages) // args.batch_size
