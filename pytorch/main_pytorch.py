@@ -129,8 +129,8 @@ def DataLoad(imdir):
         img_whole = image_padding(img_whole)
         h, w = img_whole.shape
         h_, w_ = h, w//2
-        l_img = img_whole[:, :w_]
-        r_img = img_whole[:, w_:2*w_]
+        r_img = img_whole[:, :w_]
+        l_img = img_whole[:, w_:2*w_]
         r_img = cv2.flip(r_img, 1) # Flip Right Image to Left
 
         _, l_cls, r_cls = os.path.basename(p).split('.')[0].split('_')
