@@ -6,7 +6,7 @@ import numpy as np
 
 from utils.data_loader import load_dataloader
 from utils.model import load_model, bind_model, train_model, valid_model
-from utils.optim_utils import lr_update
+from utils.optim_utils import lr_update, load_optimizer
 
 import torch
 import torch.nn as nn
@@ -25,17 +25,24 @@ def ParserArguments():
     args = argparse.ArgumentParser()
 
     # Setting Hyperparameters
-    args.add_argument('--nb_epoch', type=int, default=80)          # epoch 수 설정
-    args.add_argument('--batch_size', type=int, default=64)      # batch size 설정
-    args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
-    args.add_argument('--wd', type=float, default=1e-2)  # learning rate 설정
-    args.add_argument('--lr_decay_epoch', type=str, default='40,60')  # learning rate 설정
+    args.add_argument('--nb_epoch', type=int, default=170)          # epoch 수 설정
+    args.add_argument('--batch_size', type=int, default=16)      # batch size 설정
     args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개 (2로 설정시 정상 vs 비정상)
+    
+    # Pre-processing
     args.add_argument('--img_size', type=int, default=224) # input crop image size
     args.add_argument('--w_min', type=int, default=50) # Window min
     args.add_argument('--w_max', type=int, default=180) # Window max
     args.add_argument('--balancing_method', type=str, default='weights', help="'aug' : augmentation / 'weights' : class_weights") # Window max
 
+    # Optimization Settings
+    args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
+    args.add_argument('--lr_decay_epoch', type=str, default='80,120,160')  # learning rate 설정
+    args.add_argument('--optim', type=str, default='adam')  # learning rate 설정
+    args.add_argument('--momentum', type=float, default=0.9)  # learning rate 설정
+    args.add_argument('--wd', type=float, default=3e-2)  # learning rate 설정
+    args.add_argument('--bias_decay', action='store_true')  # learning rate 설정
+    
     # Network
     args.add_argument('--network', type=str, default='resnet34')
     args.add_argument('--dropout', type=float, default=0.5)
@@ -73,7 +80,7 @@ if __name__ == '__main__':
         criterion = nn.CrossEntropyLoss().to(device)
 
     # Optimizer
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=args.wd)
+    optimizer = load_optimizer(model, args)
 
 
     if args.pause:  ## for test mode
