@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def image_padding(img_whole):
     img = np.zeros((600,300))
     h, w = img_whole.shape
@@ -15,6 +16,7 @@ def image_padding(img_whole):
 
     return img
 
+
 def image_windowing(img, w_min=50, w_max=180):
     img_w = img.copy()
 
@@ -22,6 +24,7 @@ def image_windowing(img, w_min=50, w_max=180):
     img_w[img_w > w_max] = w_max
 
     return img_w
+
 
 def image_bg_reduction(img):
     img_wo_bg = img.copy()
@@ -37,10 +40,12 @@ def image_bg_reduction(img):
 
     return img_wo_bg
 
+
 def image_roi_crop(img, img_size):
     half_size = img_size // 2
     return img[..., 350-half_size:350+half_size,
                150-half_size:150+half_size].copy()
+
 
 def image_minmax(img):
     img_minmax = img.copy()
@@ -52,6 +57,7 @@ def image_minmax(img):
         img_minmax = ((img - np.min(img)) / (np.max(img) - np.min(img))).copy()
         
     return img_minmax
+
 
 def image_zscore(img, mean=[0.485,0.456,0.406],std=[0.229,0.224,0.225]):
     MEAN = np.array(mean)[...,None,None]
@@ -92,3 +98,5 @@ def ImagePreprocessing(img, args):
         
     print(len(img), 'images processed!')
     return img
+
+

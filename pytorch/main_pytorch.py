@@ -5,7 +5,7 @@ import argparse
 import numpy as np
 
 from utils.data_loader import load_dataloader
-from utils.model import load_model, bind_model, train_model, valid_model
+from utils.model import load_model, bind_model, train_model, valid_model, Ensemble
 from utils.optim_utils import lr_update, load_optimizer
 
 import torch
@@ -13,19 +13,14 @@ import torch.nn as nn
 
 import nsml
 
-# Seed
-RANDOM_SEED = 1234
-torch.manual_seed(RANDOM_SEED)
-torch.cuda.manual_seed(RANDOM_SEED)
-np.random.seed(RANDOM_SEED)
-random.seed(RANDOM_SEED)
+import copy
 
 
 def ParserArguments():
     args = argparse.ArgumentParser()
 
     # Setting Hyperparameters
-    args.add_argument('--nb_epoch', type=int, default=170)       # epoch 수 설정
+    args.add_argument('--nb_epoch', type=int, default=140)       # epoch 수 설정
     args.add_argument('--batch_size', type=int, default=16)      # batch size 설정
     args.add_argument('--num_classes', type=int, default=4)      # 분류될 클래스 수는 4개
     args.add_argument('--stack_channels', action='store_true')   # 2가지 window로 만들어낸 이미지를 input channel로 쌓아 3-channel로
@@ -39,12 +34,16 @@ def ParserArguments():
 
     # Optimization Settings
     args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
-    args.add_argument('--lr_decay_epoch', type=str, default='80,120,160')  # learning rate decay epoch
+    args.add_argument('--lr_decay_epoch', type=str, default='80,110,130')  # learning rate decay epoch
     args.add_argument('--optim', type=str, default='adam')  # Optimizer
     args.add_argument('--momentum', type=float, default=0.9)  # Momentum
     args.add_argument('--wd', type=float, default=3e-2)  # Weight decay
     args.add_argument('--bias_decay', action='store_true')  # 선언 시 bias에도 weight decay 적용
-    
+
+    # Ensemble
+    args.add_argument('--ensemble', action='store_true')  # True, if Ensemble
+    args.add_argument('--num_models', type=int, default=1)  # Ensemble model numbers
+
     # Network
     args.add_argument('--network', type=str, default='resnet34')
     args.add_argument('--resume', type=str, default='./weights/resnet34.pth')
@@ -71,8 +70,13 @@ if __name__ == '__main__':
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     # Model
-    model = load_model(args)
+    if args.ensemble:
+        model = Ensemble(args)
+    else:
+        model = load_model(args)
     model.to(device)
+
+
     bind_model(model, args)
 
     # Loss
@@ -90,7 +94,70 @@ if __name__ == '__main__':
         print('Inferring Start ...')
         nsml.paused(scope=locals())
 
-    if args.mode == 'train':  ## for train mode
+
+    if args.mode == 'train' and args.ensemble:  # for Ensemble train mode
+        print('Training for Ensemble start ...')
+        models_weight_list = []
+        for n_model, RANDOM_SEED in zip(range(args.num_models), random.sample(range(0,100), args.num_models)):
+            print("Start %d_model"%n_model)
+            # Seed
+            torch.manual_seed(RANDOM_SEED)
+            torch.cuda.manual_seed(RANDOM_SEED)
+            np.random.seed(RANDOM_SEED)
+            random.seed(RANDOM_SEED)
+
+            model_part = load_model(args).to(device)
+            # Optimizer
+            optimizer = load_optimizer(model_part, args)
+
+            batch_train, batch_val = load_dataloader(args)
+            second_best_model_weight, best_model_weight = None, None
+            best_loss = 10000
+            second_best_loss = 10000
+
+            #####   Training loop   #####
+            for epoch in range(args.nb_epoch):
+                train_loss, train_f1 = train_model(epoch, batch_train, device, optimizer, model_part, criterion, args)
+                val_loss, val_f1 = valid_model(epoch, batch_val, device, model_part, criterion, args)
+
+                if val_loss.avg < second_best_loss:
+                    second_best_loss = val_loss.avg
+                    second_best_model_weight = copy.deepcopy(model_part.state_dict())
+
+                if val_loss.avg < best_loss:
+                    second_best_loss = best_loss
+                    best_loss = val_loss.avg
+                    best_model_weight = copy.deepcopy(model_part.state_dict())
+
+                # total summary
+                print("  * Train loss = {:.4f} | Train F1 = {:.4f} | Val loss = {:.4f} | Val F1 = {:.4f}" \
+                      .format(train_loss.avg, train_f1, val_loss.avg, val_f1))
+
+                nsml.report(summary=True, step=epoch, epoch_total=args.nb_epoch,
+                            loss=train_loss.avg, f1=train_f1, val_loss=val_loss.avg, val_f1=val_f1)
+
+                # Update learning rate
+                lr_update(epoch, args, optimizer)
+
+            models_weight_list.append([best_model_weight, second_best_model_weight])
+
+        cnt = 0
+        for i in models_weight_list[0]:
+            for j in models_weight_list[1]:
+                for k in models_weight_list[2]:
+                    model._load_trained_networks([i,j,k])
+                    nsml.save(cnt)
+                    cnt += 1
+
+
+    elif args.mode == 'train':  ## for train mode
+        # Seed
+        RANDOM_SEED = 1234
+        torch.manual_seed(RANDOM_SEED)
+        torch.cuda.manual_seed(RANDOM_SEED)
+        np.random.seed(RANDOM_SEED)
+        random.seed(RANDOM_SEED)
+
         print('Training start ...')
         batch_train, batch_val = load_dataloader(args)
         

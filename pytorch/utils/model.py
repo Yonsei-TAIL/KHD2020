@@ -7,10 +7,39 @@ from utils.transform import ImagePreprocessing
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from efficientnet_pytorch import EfficientNet
 from torchvision.models import resnet18, resnet34, resnet101
 
 import nsml
+
+class Ensemble(nn.Module):
+
+    def __init__(self, args):
+        super(Ensemble, self).__init__()
+        self.num_classes = args.num_classes
+        self.num_models = args.num_models
+        self.args = args
+
+        self.models = nn.ModuleList([load_model(self.args) for _ in range(args.num_models)])
+
+    def _load_trained_networks(self, weight_set):
+        for i, weight in enumerate(weight_set):
+            self.models[i].load_state_dict(weight)
+
+    def forward(self, X):
+        for i, model_ in enumerate(self.models):
+            pred_ = model_(X).softmax(dim=1)
+            print(pred_)
+            if i == 0:
+                pred = pred_
+            else:
+                pred += pred_
+
+        preds_mean = pred / self.args.num_models
+        print("Mean", preds_mean, "\n")
+        return preds_mean
+
 
 def bind_model(model, args):
     def save(dir_name):
@@ -44,6 +73,7 @@ def bind_model(model, args):
 
     nsml.bind(save=save, load=load, infer=infer)
 
+
 def load_model(args):
     #####   Model   #####
     if 'efficientnet' in args.network:
@@ -60,6 +90,22 @@ def load_model(args):
         model.fc = nn.Linear(model.fc.in_features, args.num_classes)
 
     elif args.network == 'resnet34':
+        model = resnet34(pretrained=False)
+
+        if os.path.isfile(args.resume):
+            model.load_state_dict(torch.load(args.resume))
+            print("ResNet-34 ImageNet pre-trained loaded...")
+
+        if not args.stack_channels:
+            model.conv1 = nn.Conv2d(1, model.conv1.out_channels, kernel_size=7, stride=2, padding=3,
+                                bias=False)
+        model.fc = nn.Sequential(
+            nn.Dropout(p=args.dropout),
+            nn.Linear(model.fc.in_features, args.num_classes)
+        )
+
+    elif args.network == 'ensemble':
+
         model = resnet34(pretrained=False)
 
         if os.path.isfile(args.resume):
