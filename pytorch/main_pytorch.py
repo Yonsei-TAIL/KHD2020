@@ -34,7 +34,7 @@ def ParserArguments():
 
     # Optimization Settings
     args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
-    args.add_argument('--lr_decay_epoch', type=str, default='80,110,130')  # learning rate decay epoch
+    args.add_argument('--lr_decay_epoch', type=str, default='60,110,130')  # learning rate decay epoch
     args.add_argument('--optim', type=str, default='adam')  # Optimizer
     args.add_argument('--momentum', type=float, default=0.9)  # Momentum
     args.add_argument('--wd', type=float, default=3e-2)  # Weight decay
@@ -98,6 +98,8 @@ if __name__ == '__main__':
     if args.mode == 'train' and args.ensemble:  # for Ensemble train mode
         print('Training for Ensemble start ...')
         models_weight_list = []
+        epoch_patient = 15
+
         for n_model, RANDOM_SEED in zip(range(args.num_models), random.sample(range(0,100), args.num_models)):
             print("Start %d_model"%n_model)
             # Seed
@@ -116,6 +118,7 @@ if __name__ == '__main__':
             second_best_loss = 10000
 
             #####   Training loop   #####
+            epoch_cnt = 0
             for epoch in range(args.nb_epoch):
                 train_loss, train_f1 = train_model(epoch, batch_train, device, optimizer, model_part, criterion, args)
                 val_loss, val_f1 = valid_model(epoch, batch_val, device, model_part, criterion, args)
@@ -125,9 +128,12 @@ if __name__ == '__main__':
                     second_best_model_weight = copy.deepcopy(model_part.state_dict())
 
                 if val_loss.avg < best_loss:
+                    epoch_cnt = 0
                     second_best_loss = best_loss
                     best_loss = val_loss.avg
                     best_model_weight = copy.deepcopy(model_part.state_dict())
+                else:
+                    epoch_cnt += 1
 
                 # total summary
                 print("  * Train loss = {:.4f} | Train F1 = {:.4f} | Val loss = {:.4f} | Val F1 = {:.4f}" \
@@ -137,7 +143,12 @@ if __name__ == '__main__':
                             loss=train_loss.avg, f1=train_f1, val_loss=val_loss.avg, val_f1=val_f1)
 
                 # Update learning rate
-                lr_update(epoch, args, optimizer)
+                if (epoch_cnt > epoch_patient) and (epoch > 30):
+                    for param_group in optimizer.param_groups:
+                        param_group['lr'] *= 0.2
+                        print("LR Decay from %.7f to %.7f" % (param_group['lr']*5, param_group['lr']))
+                    epoch_cnt = 0
+                # lr_update(epoch, args, optimizer)
 
             models_weight_list.append([best_model_weight, second_best_model_weight])
 
