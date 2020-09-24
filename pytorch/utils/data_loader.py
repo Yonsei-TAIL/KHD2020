@@ -36,7 +36,7 @@ def DataLoad(imdir, args):
     img_train,img_val = [],[]
     lb_train,lb_val = [],[]
 
-    if args.num_classes==4 and args.balancing_method=='aug':
+    if args.balancing_method=='aug':
         for i in [1,0,2,3]:
             timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
 
@@ -62,7 +62,7 @@ def DataLoad(imdir, args):
             lb_train += tlabel
             lb_val += vlabel
     
-    elif args.num_classes==2 or args.balancing_method=='weights':
+    elif args.balancing_method=='weights':
         for i in range(4):
             timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
             timg_flip = [cv2.flip(img, 1) for img in timg]
@@ -93,7 +93,9 @@ class Sdataset(Dataset):
     def _init_images(self):
         self.images = ImagePreprocessing(self.images, self.args)
         self.images = np.array(self.images)
-        self.images = np.expand_dims(self.images, axis=1)
+
+        if not self.args.stack_channels:
+            self.images = np.expand_dims(self.images, axis=1)
 
     def augment_img(self, img):
         if self.args.augmentation == 'heavy':
@@ -113,9 +115,6 @@ class Sdataset(Dataset):
                     iaa.Crop(percent=(0, 0.05)),
                 ], random_order=True)
 
-            seq_det = seq.to_deterministic()
-            img = seq_det.augment_images(img)
-
         else:
             scale_factor = random.uniform(1-self.args.scale_factor, 1+self.args.scale_factor)
             rot_factor = random.uniform(-self.args.rot_factor, self.args.rot_factor)
@@ -127,8 +126,16 @@ class Sdataset(Dataset):
                     )
                 ], random_order=True)
 
-            seq_det = seq.to_deterministic()
+        seq_det = seq.to_deterministic()
+
+        if np.ndim(img) == 2:
+            # Grayscale
             img = seq_det.augment_images(img)
+        elif np.ndim(img) == 3:
+            # (C, H, W) -> (1, H, W, C)
+            img = np.moveaxis(img, 0, -1)[None, ...]
+            img = seq_det.augment_images(img)
+            img = np.moveaxis(img[0], -1, 0)
 
         return img
 
@@ -140,9 +147,6 @@ class Sdataset(Dataset):
             image = self.augment_img(image)
 
         image = torch.tensor(image).float()
-
-        if self.args.num_classes==2:
-            label = 1 if label > 0 else 0
 
         return image, label
 

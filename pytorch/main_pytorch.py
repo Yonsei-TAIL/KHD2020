@@ -25,9 +25,10 @@ def ParserArguments():
     args = argparse.ArgumentParser()
 
     # Setting Hyperparameters
-    args.add_argument('--nb_epoch', type=int, default=170)          # epoch 수 설정
+    args.add_argument('--nb_epoch', type=int, default=170)       # epoch 수 설정
     args.add_argument('--batch_size', type=int, default=16)      # batch size 설정
-    args.add_argument('--num_classes', type=int, default=4)     # 분류될 클래스 수는 4개 (2로 설정시 정상 vs 비정상)
+    args.add_argument('--num_classes', type=int, default=4)      # 분류될 클래스 수는 4개
+    args.add_argument('--stack_channels', action='store_true')   # 2가지 window로 만들어낸 이미지를 input channel로 쌓아 3-channel로
     
     # Pre-processing
     args.add_argument('--img_size', type=int, default=224) # input crop image size
@@ -37,11 +38,11 @@ def ParserArguments():
 
     # Optimization Settings
     args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
-    args.add_argument('--lr_decay_epoch', type=str, default='80,120,160')  # learning rate 설정
-    args.add_argument('--optim', type=str, default='adam')  # learning rate 설정
-    args.add_argument('--momentum', type=float, default=0.9)  # learning rate 설정
-    args.add_argument('--wd', type=float, default=3e-2)  # learning rate 설정
-    args.add_argument('--bias_decay', action='store_true')  # learning rate 설정
+    args.add_argument('--lr_decay_epoch', type=str, default='80,120,160')  # learning rate decay epoch
+    args.add_argument('--optim', type=str, default='adam')  # Optimizer
+    args.add_argument('--momentum', type=float, default=0.9)  # Momentum
+    args.add_argument('--wd', type=float, default=3e-2)  # Weight decay
+    args.add_argument('--bias_decay', action='store_true')  # 선언 시 bias에도 weight decay 적용
     
     # Network
     args.add_argument('--network', type=str, default='resnet34')
