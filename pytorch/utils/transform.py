@@ -22,7 +22,7 @@ def image_windowing(img, w_min=50, w_max=180):
     img_w[img_w > w_max] = w_max
 
     return img_w
-    
+
 def image_bg_reduction(img):
     img_wo_bg = img.copy()
     
@@ -53,6 +53,14 @@ def image_minmax(img):
         
     return img_minmax
 
+def image_zscore(img, mean=[0.485,0.456,0.406],std=[0.229,0.224,0.225]):
+    MEAN = np.array(mean)[...,None,None]
+    STD  = np.array(std)[...,None,None]
+
+    img_z = (img - MEAN) / STD
+    return img_z
+
+
 def ImagePreprocessing(img, args):
     # 자유롭게 작성
     print('Preprocessing ...')
@@ -76,6 +84,9 @@ def ImagePreprocessing(img, args):
         
         # Min-Max scaling
         im = image_minmax(im)
+
+        if args.zscore:
+            im = image_zscore(im)
 
         img[i] = im
         

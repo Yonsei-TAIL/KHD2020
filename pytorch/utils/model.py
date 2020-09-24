@@ -8,7 +8,7 @@ from utils.transform import ImagePreprocessing
 import torch
 import torch.nn as nn
 from efficientnet_pytorch import EfficientNet
-from torchvision.models import resnet18, resnet34
+from torchvision.models import resnet18, resnet34, resnet101
 
 import nsml
 
@@ -16,7 +16,7 @@ def bind_model(model, args):
     def save(dir_name):
         os.makedirs(dir_name, exist_ok=True)
         torch.save(model.state_dict(), os.path.join(dir_name, 'model'))
-        print('model saved!')
+        print('model saved to %s!' % os.path.join(dir_name, 'model'))
 
     def load(dir_name):
         model.load_state_dict(torch.load(os.path.join(dir_name, 'model')))
@@ -61,6 +61,11 @@ def load_model(args):
 
     elif args.network == 'resnet34':
         model = resnet34(pretrained=False)
+
+        if os.path.isfile(args.resume):
+            model.load_state_dict(torch.load(args.resume))
+            print("ResNet-34 ImageNet pre-trained loaded...")
+
         if not args.stack_channels:
             model.conv1 = nn.Conv2d(1, model.conv1.out_channels, kernel_size=7, stride=2, padding=3,
                                 bias=False)
@@ -68,6 +73,7 @@ def load_model(args):
             nn.Dropout(p=args.dropout),
             nn.Linear(model.fc.in_features, args.num_classes)
         )
+
     
     return model
 

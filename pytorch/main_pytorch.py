@@ -34,7 +34,8 @@ def ParserArguments():
     args.add_argument('--img_size', type=int, default=224) # input crop image size
     args.add_argument('--w_min', type=int, default=50) # Window min
     args.add_argument('--w_max', type=int, default=180) # Window max
-    args.add_argument('--balancing_method', type=str, default='weights', help="'aug' : augmentation / 'weights' : class_weights") # Window max
+    args.add_argument('--zscore', action='store_true', help="apply ImageNet-based Z-score normalization")
+    args.add_argument('--balancing_method', type=str, default='weights', help="'aug' : augmentation / 'weights' : class_weights")
 
     # Optimization Settings
     args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
@@ -46,6 +47,7 @@ def ParserArguments():
     
     # Network
     args.add_argument('--network', type=str, default='resnet34')
+    args.add_argument('--resume', type=str, default='./weights/resnet34.pth')
     args.add_argument('--dropout', type=float, default=0.5)
 
     # Augmentation
