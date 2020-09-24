@@ -20,8 +20,8 @@ def ParserArguments():
     args = argparse.ArgumentParser()
 
     # Setting Hyperparameters
-    args.add_argument('--nb_epoch', type=int, default=140)       # epoch 수 설정
-    args.add_argument('--batch_size', type=int, default=16)      # batch size 설정
+    args.add_argument('--nb_epoch', type=int, default=60)       # epoch 수 설정
+    args.add_argument('--batch_size', type=int, default=8)      # batch size 설정
     args.add_argument('--num_classes', type=int, default=4)      # 분류될 클래스 수는 4개
     args.add_argument('--stack_channels', action='store_true')   # 2가지 window로 만들어낸 이미지를 input channel로 쌓아 3-channel로
     
@@ -33,9 +33,10 @@ def ParserArguments():
     args.add_argument('--balancing_method', type=str, default='weights', help="'aug' : augmentation / 'weights' : class_weights")
 
     # Optimization Settings
-    args.add_argument('--learning_rate', type=float, default=1e-3)  # learning rate 설정
-    args.add_argument('--lr_decay_epoch', type=str, default='60,110,130')  # learning rate decay epoch
-    args.add_argument('--optim', type=str, default='adam')  # Optimizer
+    args.add_argument('--learning_rate', type=float, default=5e-4)  # learning rate 설정
+    args.add_argument('--lr_decay_epoch', type=str, default='30,45')  # learning rate decay epoch
+    args.add_argument('--decay_ratio', type=float, default=0.1)  # learning rate decay epoch
+    args.add_argument('--optim', type=str, default='sgd')  # Optimizer
     args.add_argument('--momentum', type=float, default=0.9)  # Momentum
     args.add_argument('--wd', type=float, default=3e-2)  # Weight decay
     args.add_argument('--bias_decay', action='store_true')  # 선언 시 bias에도 weight decay 적용
@@ -116,9 +117,9 @@ if __name__ == '__main__':
             second_best_model_weight, best_model_weight = None, None
             best_loss = 10000
             second_best_loss = 10000
-
+            
             #####   Training loop   #####
-            epoch_cnt = 0
+            epoch_cnt, n_decay = 0, 0
             for epoch in range(args.nb_epoch):
                 train_loss, train_f1 = train_model(epoch, batch_train, device, optimizer, model_part, criterion, args)
                 val_loss, val_f1 = valid_model(epoch, batch_val, device, model_part, criterion, args)
@@ -143,12 +144,17 @@ if __name__ == '__main__':
                             loss=train_loss.avg, f1=train_f1, val_loss=val_loss.avg, val_f1=val_f1)
 
                 # Update learning rate
-                if (epoch_cnt > epoch_patient) and (epoch > 30):
-                    for param_group in optimizer.param_groups:
-                        param_group['lr'] *= 0.2
-                        print("LR Decay from %.7f to %.7f" % (param_group['lr']*5, param_group['lr']))
-                    epoch_cnt = 0
-                # lr_update(epoch, args, optimizer)
+                # if (epoch_cnt > epoch_patient) and (epoch > 30):
+                #     n_decay += 1
+                #     if n_decay == 4:
+                #         print("Early Stopping...\n")
+                #         break
+
+                #     for param_group in optimizer.param_groups:
+                #         param_group['lr'] *= 0.2
+                #         print("LR Decay from %.7f to %.7f" % (param_group['lr']*5, param_group['lr']))
+                #     epoch_cnt = 0
+                lr_update(epoch, args, optimizer)
 
             models_weight_list.append([best_model_weight, second_best_model_weight])
 

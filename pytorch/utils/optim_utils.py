@@ -8,7 +8,7 @@ def lr_update(epoch, args, optimizer):
     prev_lr = get_current_lr(optimizer)
     if (epoch + 1) in args.lr_decay_epoch:
         for param_group in optimizer.param_groups:
-            param_group['lr'] = (prev_lr * 0.1)
+            param_group['lr'] = (prev_lr * args.decay_ratio)
             print("LR Decay : %.7f to %.7f" % (prev_lr, prev_lr * 0.1))
 
 class FocalLoss(nn.Module):
