@@ -96,18 +96,39 @@ class Sdataset(Dataset):
         self.images = np.expand_dims(self.images, axis=1)
 
     def augment_img(self, img):
-        scale_factor = random.uniform(1-self.args.scale_factor, 1+self.args.scale_factor)
-        rot_factor = random.uniform(-self.args.rot_factor, self.args.rot_factor)
+        if self.args.augmentation == 'heavy':
+            scale_factor = random.uniform(1-self.args.scale_factor, 1+self.args.scale_factor)
+            rot_factor = random.uniform(-self.args.rot_factor, self.args.rot_factor)
 
-        seq = iaa.Sequential([
-                iaa.Affine(
-                    scale=(scale_factor, scale_factor),
-                    rotate=rot_factor
-                )
-            ])
+            seq = iaa.Sequential([
+                    iaa.Affine(
+                        scale=(scale_factor, scale_factor),
+                        rotate=rot_factor,
+                        translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},
+                    ),
+                    iaa.Sometimes(
+                        0.5,
+                        iaa.GaussianBlur(sigma=(0, 1.0))
+                    ),
+                    iaa.Crop(percent=(0, 0.05)),
+                ], random_order=True)
 
-        seq_det = seq.to_deterministic()
-        img = seq_det.augment_images(img)
+            seq_det = seq.to_deterministic()
+            img = seq_det.augment_images(img)
+
+        else:
+            scale_factor = random.uniform(1-self.args.scale_factor, 1+self.args.scale_factor)
+            rot_factor = random.uniform(-self.args.rot_factor, self.args.rot_factor)
+
+            seq = iaa.Sequential([
+                    iaa.Affine(
+                        scale=(scale_factor, scale_factor),
+                        rotate=rot_factor
+                    )
+                ], random_order=True)
+
+            seq_det = seq.to_deterministic()
+            img = seq_det.augment_images(img)
 
         return img
 

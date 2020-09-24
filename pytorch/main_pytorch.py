@@ -41,6 +41,7 @@ def ParserArguments():
     args.add_argument('--dropout', type=float, default=0.5)
 
     # Augmentation
+    args.add_argument('--augmentation', type=str, default='light', help="'light' or 'heavy")          
     args.add_argument('--rot_factor', type=float, default=15)          
     args.add_argument('--scale_factor', type=float, default=0.15)          
 

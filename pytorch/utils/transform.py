@@ -27,10 +27,10 @@ def image_windowing(img, w_min=50, w_max=180):
 def image_bg_reduction(img):
     img_wo_bg = img.copy()
 
-    img_wo_bg[:250] = 0
-    img_wo_bg[500:] = 0
-    img_wo_bg[:, :60] = 0
-    img_wo_bg[:, -60:] = 0
+    img_wo_bg[:250] = np.min(img)
+    img_wo_bg[500:] = np.min(img)
+    img_wo_bg[:, :60] = np.min(img)
+    img_wo_bg[:, -60:] = np.min(img)
 
     return img_wo_bg
 
