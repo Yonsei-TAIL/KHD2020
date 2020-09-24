@@ -14,7 +14,7 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 from nsml.constants import DATASET_PATH
 
 def DataLoad(imdir, args):
-    impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if all(s in f for s in ['.jpg'])][:200]
+    impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if all(s in f for s in ['.jpg'])]
 
     img_list = defaultdict(list)
     print('Loading', len(impath), 'images ...')
