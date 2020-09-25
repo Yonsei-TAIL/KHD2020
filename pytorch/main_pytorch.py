@@ -6,7 +6,7 @@ import numpy as np
 
 from utils.data_loader import load_dataloader
 from utils.model import load_model, bind_model, train_model, valid_model, Ensemble
-from utils.optim_utils import lr_update, load_optimizer
+from utils.optim_utils import lr_update, load_optimizer, CosineWarmupLR, LabelSmoothingLoss
 
 import torch
 import torch.nn as nn
@@ -27,7 +27,7 @@ def ParserArguments():
     
     # Pre-processing
     args.add_argument('--img_size', type=int, default=224) # input crop image size
-    args.add_argument('--w_min', type=int, default=50) # Window min
+    args.add_argument('--w_min', type=int, default=50) # Window mind
     args.add_argument('--w_max', type=int, default=180) # Window max
     args.add_argument('--zscore', action='store_true', help="apply ImageNet-based Z-score normalization")
     args.add_argument('--balancing_method', type=str, default='weights', help="'aug' : augmentation / 'weights' : class_weights")
@@ -40,6 +40,9 @@ def ParserArguments():
     args.add_argument('--momentum', type=float, default=0.9)  # Momentum
     args.add_argument('--wd', type=float, default=3e-2)  # Weight decay
     args.add_argument('--bias_decay', action='store_true')  # 선언 시 bias에도 weight decay 적용
+    args.add_argument('--cosine_annealing', action='store_true')  # 선언 시 bias에도 weight decay 적용
+    args.add_argument('--warmup_epoch', type=int, default=5)  # 선언 시 bias에도 weight decay 적용
+    args.add_argument('--min_lr', type=float, default=0.000005)  # Weight decay
 
     # Ensemble
     args.add_argument('--ensemble', action='store_true')  # True, if Ensemble
@@ -177,10 +180,15 @@ if __name__ == '__main__':
 
         print('Training start ...')
         batch_train, batch_val = load_dataloader(args)
-        
+
+        # Learning Rate Scheduler
+        lr_fn = CosineWarmupLR(optimizer=optimizer, epochs=60, iter_in_one_epoch=len(batch_train), lr_min=args.min_lr,
+                               warmup_epochs=args.warmup_epoch)
+
+
         #####   Training loop   #####
         for epoch in range(args.nb_epoch):
-            train_loss, train_f1 = train_model(epoch, batch_train, device, optimizer, model, criterion, args)
+            train_loss, train_f1 = train_model(epoch, batch_train, device, optimizer, model, criterion, lr_fn, args)
             val_loss, val_f1 = valid_model(epoch, batch_val, device, model, criterion, args)
 
             # total summary

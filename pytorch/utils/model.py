@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from efficientnet_pytorch import EfficientNet
-from torchvision.models import resnet18, resnet34, resnet101
+from torchvision.models import resnet18, resnet34,resnet50, resnet101
 
 import nsml
 
@@ -65,7 +65,9 @@ def bind_model(model, args):
         with torch.no_grad():
             X = torch.from_numpy(X).float().to(device)
             pred = model.forward(X)
-            prob, pred_cls = torch.max(pred, 1)
+            print(pred)
+            print(pred.softmax(dim=1))
+            prob, pred_cls = torch.max(pred.softmax(dim=1), 1)
             pred_cls = pred_cls.tolist()
             #pred_cls = pred_cls.data.cpu().numpy()
         print('Prediction done!\n Saving the result...')
@@ -104,6 +106,21 @@ def load_model(args):
             nn.Linear(model.fc.in_features, args.num_classes)
         )
 
+    elif args.network == 'resnet50':
+        model = resnet50(pretrained=False)
+
+        if os.path.isfile(args.resume):
+            model.load_state_dict(torch.load(args.resume))
+            print("ResNet-50 ImageNet pre-trained loaded...")
+
+        if not args.stack_channels:
+            model.conv1 = nn.Conv2d(1, model.conv1.out_channels, kernel_size=7, stride=2, padding=3,
+                                bias=False)
+        model.fc = nn.Sequential(
+            nn.Dropout(p=args.dropout),
+            nn.Linear(model.fc.in_features, args.num_classes)
+        )
+
     elif args.network == 'ensemble':
 
         model = resnet34(pretrained=False)
@@ -123,7 +140,7 @@ def load_model(args):
     
     return model
 
-def train_model(epoch, batch_train, device, optimizer, model, criterion, args):
+def train_model(epoch, batch_train, device, optimizer, model, criterion, lr_fn, args):
     model.train()
     print('Model fitting ...')
     print('epoch = {} / {}'.format(epoch + 1, args.nb_epoch))
@@ -142,6 +159,9 @@ def train_model(epoch, batch_train, device, optimizer, model, criterion, args):
 
         loss.backward()
         optimizer.step()
+
+        # cosing annealing
+        lr_fn.step(epoch * len(batch_train) + i)
 
         _, pred_cls = torch.max(pred, 1)
 
