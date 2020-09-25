@@ -1,5 +1,6 @@
 import torch.nn as nn
 import torch
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import _LRScheduler
 from math import pi, cos, log, floor
 from torch.autograd import Variable
@@ -16,26 +17,24 @@ def lr_update(epoch, args, optimizer):
             print("LR Decay : %.7f to %.7f" % (prev_lr, prev_lr * 0.1))
 
 
-class LabelSmoothingLoss(nn.Module):
-    '''
-    Label Smoothing Loss function
-    '''
-
-    def __init__(self, classes_num, label_smoothing=0.0, dim=-1):
-        super(LabelSmoothingLoss, self).__init__()
-        self.confidence = 1.0 - label_smoothing
-        self.label_smoothing = label_smoothing
-        self.classes_num = classes_num
-        self.dim = dim
-        self.criterion = nn.KLDivLoss(reduction='batchmean')
-
-    def forward(self, pred, target):
-        pred = pred.log_softmax(dim=self.dim)
-        smooth_label = torch.empty(size=pred.size(), device=target.device)
-        smooth_label.fill_(self.label_smoothing / (self.classes_num - 1))
-        smooth_label.scatter_(1, target.data.unsqueeze(1), self.confidence)
-        #return torch.mean(torch.sum(-smooth_label * pred, dim=self.dim))
-        return self.criterion(pred, Variable(smooth_label, requires_grad=False))
+class LabelSmoothingCrossEntropy(nn.Module):
+    def __init__(self, smoothing_factor=0.1, class_weights=None):
+        super(LabelSmoothingCrossEntropy, self).__init__()
+        
+        self.smoothing_factor = smoothing_factor
+        self.class_weights = class_weights
+        
+    def forward(self, x, target):
+        confidence = 1. - self.smoothing_factor
+        logprobs = F.log_softmax(x, dim=-1)
+        nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
+        nll_loss = nll_loss.squeeze(1)
+        smooth_loss = -logprobs.mean(dim=-1)
+        loss = confidence * nll_loss + self.smoothing_factor * smooth_loss
+        
+        if self.class_weights is not None:
+            loss = loss * self.class_weights
+        return loss.mean()
 
 
 class FocalLoss(nn.Module):

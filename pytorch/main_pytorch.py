@@ -6,7 +6,7 @@ import numpy as np
 
 from utils.data_loader import load_dataloader
 from utils.model import load_model, bind_model, train_model, valid_model, Ensemble
-from utils.optim_utils import lr_update, load_optimizer, CosineWarmupLR, LabelSmoothingLoss
+from utils.optim_utils import lr_update, load_optimizer, CosineWarmupLR, LabelSmoothingCrossEntropy
 
 import torch
 import torch.nn as nn
@@ -43,6 +43,7 @@ def ParserArguments():
     args.add_argument('--cosine_annealing', action='store_true')  # 선언 시 bias에도 weight decay 적용
     args.add_argument('--warmup_epoch', type=int, default=5)  # 선언 시 bias에도 weight decay 적용
     args.add_argument('--min_lr', type=float, default=0.000005)  # Weight decay
+    args.add_argument('--smoothing_factor', type=float, default=0.1)  # Weight decay
 
     # Ensemble
     args.add_argument('--ensemble', action='store_true')  # True, if Ensemble
@@ -80,13 +81,17 @@ if __name__ == '__main__':
         model = load_model(args)
     model.to(device)
 
-
+    # Bind Model
     bind_model(model, args)
 
     # Loss
     if args.balancing_method == 'weights':
         class_weights = torch.Tensor([1,4,6,9])
-        criterion = nn.CrossEntropyLoss(class_weights).to(device)
+
+        if args.smoothing_factor > 0:
+            criterion = LabelSmoothingCrossEntropy().to(device)        
+        else:
+            criterion = nn.CrossEntropyLoss(args.smoothing_factor, class_weights).to(device)
     else:
         criterion = nn.CrossEntropyLoss().to(device)
 
