@@ -27,4 +27,4 @@ We trained network using SGD optimizer with a momentum of 0.9 and decay of 0.3. 
 - Submit command : ```nsml submit NSML_ID/2020KHD_PNS/SESSION_NUM CHECKPOINT_NUM```
 
 #### Local Environment
-- Main command : ```python main_pytorch.py --DATASET_PATH YOUR_DATASET_DIR --batch_size 64'```
+- Main command : ```python main_pytorch.py --DATASET_PATH YOUR_DATASET_DIR --batch_size 64```
