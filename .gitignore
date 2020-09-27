@@ -1,4 +1,3 @@
-*.ipynb
 data/*
 .DS_STORE
 __pycache__
