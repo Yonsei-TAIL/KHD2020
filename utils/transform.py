@@ -59,14 +59,6 @@ def image_minmax(img):
     return img_minmax
 
 
-def image_zscore(img, mean=[0.485,0.456,0.406],std=[0.229,0.224,0.225]):
-    MEAN = np.array(mean)[...,None,None]
-    STD  = np.array(std)[...,None,None]
-
-    img_z = (img - MEAN) / STD
-    return img_z
-
-
 def ImagePreprocessing(img, args):
     # 자유롭게 작성
     print('Preprocessing ...')
@@ -75,12 +67,7 @@ def ImagePreprocessing(img, args):
         im = image_padding(im)
         
         # Windowing
-        if args.stack_channels:
-            im_w1 = image_windowing(im, args.w_min, args.w_max)
-            im_w2 = image_windowing(im, 100, 200)
-            im = np.stack([im, im_w1, im_w2], 0)
-        else:
-            im = image_windowing(im, args.w_min, args.w_max)
+        im = image_windowing(im, args.w_min, args.w_max)
 
         # Background reduction
         im = image_bg_reduction(im)
@@ -90,9 +77,6 @@ def ImagePreprocessing(img, args):
         
         # Min-Max scaling
         im = image_minmax(im)
-
-        if args.zscore:
-            im = image_zscore(im)
 
         img[i] = im
         
