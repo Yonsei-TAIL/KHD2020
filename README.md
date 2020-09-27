@@ -4,9 +4,10 @@ This repository is the 3rd place solution the sinusitis classifcation of [KHD202
 
 **NOTE** : It is unable to run this code on your local machine because the challenge was based on [NSML](https://ai.nsml.navercorp.com/intro) infrastructure and the dataset was private. You have to customize the [data_loader.py](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/data_loader.py) to run training code with your own dataset and specify the directory on [DATASET_PATH](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/config.py#L8) argument.
 
+## Getting Started
 **Requirements** : run ```pip install -r requirements.txt```
 
-#### [Pre-processing](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/transform.py#L70-L100)
+#### [Pre-processing](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/transform.py#L62-L84)
 1. Zero-padding to 300x600
 2. Windowing
 3. Background reduction
