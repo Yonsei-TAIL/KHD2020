@@ -9,9 +9,12 @@ from sklearn.model_selection import train_test_split
 from utils.transform import ImagePreprocessing
 
 import torch
-from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.utils.data import Dataset, DataLoader
 
-from nsml.constants import DATASET_PATH
+try:
+    from nsml.constants import DATASET_PATH
+except:
+    DATASET_PATH = None
 
 def DataLoad(imdir, args):
     impath = [os.path.join(dirpath, f) for dirpath, dirnames, files in os.walk(imdir) for f in files if all(s in f for s in ['.jpg'])]
@@ -19,8 +22,10 @@ def DataLoad(imdir, args):
     img_list = defaultdict(list)
     print('Loading', len(impath), 'images ...')
 
+    # Load image and split it to left-right part
     for i, p in enumerate(impath):
         img_whole = cv2.imread(p, 0)
+
         h, w = img_whole.shape
         h_, w_ = h, w//2
         l_img = img_whole[:, w_:2*w_]
@@ -33,46 +38,24 @@ def DataLoad(imdir, args):
         if r_cls=='0' or r_cls=='1' or r_cls=='2' or r_cls=='3':
             img_list[int(r_cls)].append(r_img)
 
+    # Split to train and validation
     img_train,img_val = [],[]
     lb_train,lb_val = [],[]
 
-    if args.balancing_method=='aug':
-        for i in [1,0,2,3]:
-            timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
+    for i in range(args.num_classes):
+        timg, vimg, tlabel, vlabel = train_test_split(img_list[i], [i]*len(img_list[i]), test_size=0.2, shuffle=True, random_state=1234)
 
-            if i == 1:
-                num = len(timg)
-            if i == 0:
-                # downsample class 0, upsample class 2,3
-                timg = random.sample(timg, num)
-                tlabel = [0] * num
-            if i == 2 or i == 3:
-                class_remain = (num - len(timg)) % len(timg)
-                class_quot = int((num - len(timg)) / len(timg))
-                timg += timg * class_quot
-                timg += random.sample(timg, class_remain)
-                tlabel = [i] * num
+        # Include flip images to train dataset.
+        timg_flip = [cv2.flip(img, 1) for img in timg]
+        timg += timg_flip
+        tlabel = tlabel * 2
 
-            timg_flip = [cv2.flip(img, 1) for img in timg]
-            timg += timg_flip
-            tlabel = tlabel * 2
-            print("train class",i,len(timg))
-            img_train += timg
-            img_val += vimg
-            lb_train += tlabel
-            lb_val += vlabel
-    
-    elif args.balancing_method=='weights':
-        for i in range(4):
-            timg, vimg, tlabel, vlabel = train_test_split(img_list[i],[i]*len(img_list[i]),test_size=0.2,shuffle=True,random_state=13241)
-            timg_flip = [cv2.flip(img, 1) for img in timg]
-            timg += timg_flip
-            tlabel = tlabel * 2
-            print("train class",i,len(timg))
-            img_train += timg
-            img_val += vimg
-            lb_train += tlabel
-            lb_val += vlabel
+        # Stack dataset
+        print("train class",i,len(timg))
+        img_train += timg
+        img_val += vimg
+        lb_train += tlabel
+        lb_val += vlabel
 
     print(len(img_train), 'Train data with label 0-3 loaded!')
     print(len(img_val), 'Validation data with label 0-3 loaded!')
@@ -80,7 +63,7 @@ def DataLoad(imdir, args):
     return img_train, lb_train, img_val, lb_val
 
 
-class Sdataset(Dataset):
+class SinusitisDataset(Dataset):
     def __init__(self, images, labels, args, augmentation):
         self.images = images
         self.args = args
@@ -94,9 +77,20 @@ class Sdataset(Dataset):
         self.images = ImagePreprocessing(self.images, self.args)
         self.images = np.array(self.images)
 
-        if not self.args.stack_channels:
-            self.images = np.expand_dims(self.images, axis=1)
+    def __getitem__(self, index):
+        image = self.images[index]
+        label = self.labels[index]
 
+        if self.augmentation:
+            image = self.augment_img(image)
+
+        image = torch.tensor(image).float()
+
+        return image, label
+
+    def __len__(self):
+        return len(self.labels)
+    
     def augment_img(self, img):
         if self.args.augmentation == 'heavy':
             scale_factor = random.uniform(1-self.args.scale_factor, 1+self.args.scale_factor)
@@ -139,25 +133,14 @@ class Sdataset(Dataset):
 
         return img
 
-    def __getitem__(self, index):
-        image = self.images[index]
-        label = self.labels[index]
-
-        if self.augmentation:
-            image = self.augment_img(image)
-
-        image = torch.tensor(image).float()
-
-        return image, label
-
-    def __len__(self):
-        return len(self.labels)
-
 
 def load_dataloader(args):
+    if DATASET_PATH is None:
+        DATASET_PATH == args.DATASET_PATH
+        
     timages, tlabels, vimages, vlabels = DataLoad(imdir=os.path.join(DATASET_PATH, 'train'), args=args)
-    tr_set = Sdataset(timages, tlabels, args, True)
-    val_set = Sdataset(vimages, vlabels, args, False)
+    tr_set = SinusitisDataset(timages, tlabels, args, True)
+    val_set = SinusitisDataset(vimages, vlabels, args, False)
     batch_train = DataLoader(tr_set, batch_size=args.batch_size, shuffle=True)
     batch_val = DataLoader(val_set, batch_size=args.batch_size, shuffle=False)
 

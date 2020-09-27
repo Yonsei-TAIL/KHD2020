@@ -1,59 +1,13 @@
-import torch.nn as nn
-import torch
-import torch.nn.functional as F
-from torch.optim.lr_scheduler import _LRScheduler
-from math import pi, cos, log, floor
-from torch.autograd import Variable
+from math import pi, cos
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+from torch.optim.lr_scheduler import _LRScheduler
 
 def get_current_lr(optimizer):
     return optimizer.state_dict()['param_groups'][0]['lr']
-
-def lr_update(epoch, args, optimizer):
-    prev_lr = get_current_lr(optimizer)
-    if (epoch + 1) in args.lr_decay_epoch:
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = (prev_lr * args.decay_ratio)
-            print("LR Decay : %.7f to %.7f" % (prev_lr, prev_lr * 0.1))
-
-
-class LabelSmoothingCrossEntropy(nn.Module):
-    def __init__(self, smoothing_factor=0.1, class_weights=None):
-        super(LabelSmoothingCrossEntropy, self).__init__()
-        
-        self.smoothing_factor = smoothing_factor
-        self.class_weights = class_weights
-        
-    def forward(self, x, target):
-        confidence = 1. - self.smoothing_factor
-        logprobs = F.log_softmax(x, dim=-1)
-        nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
-        nll_loss = nll_loss.squeeze(1)
-        smooth_loss = -logprobs.mean(dim=-1)
-        loss = confidence * nll_loss + self.smoothing_factor * smooth_loss
-        
-        if self.class_weights is not None:
-            loss = loss * self.class_weights
-        return loss.mean()
-
-
-class FocalLoss(nn.Module):
-    def __init__(self, alpha=1, gamma=2, reduce=True):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.reduce = reduce
-
-    def forward(self, inputs, targets):
-        CE_loss = nn.CrossEntropyLoss(reduce=False)(inputs, targets)
-
-        pt = torch.exp(-CE_loss)
-        F_loss = self.alpha * (1-pt)**self.gamma * CE_loss
-
-        if self.reduce:
-            return torch.mean(F_loss)
-        else:
-            return F_loss
 
 def load_optimizer(model, args):
     if not args.bias_decay:
@@ -78,7 +32,12 @@ def load_optimizer(model, args):
   
     return optimizer
 
-
+def load_loss_function(args):
+    class_weights = torch.Tensor(args.class_weights[)
+    criterion = nn.CrossEntropyLoss(class_weights)
+    
+    return criterion
+        
 class CosineWarmupLR(_LRScheduler):
     '''
     Cosine lr decay function with warmup.
