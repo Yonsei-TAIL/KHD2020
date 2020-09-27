@@ -21,7 +21,7 @@ except:
     environ = 'local'
     print("Local Environment.")
 
-# S eed
+# Seed
 RANDOM_SEED = 1234
 torch.manual_seed(RANDOM_SEED)
 torch.cuda.manual_seed(RANDOM_SEED)

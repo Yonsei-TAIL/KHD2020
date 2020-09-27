@@ -7,7 +7,7 @@ This repository is the 3rd place solution the sinusitis classifcation of [KHD202
 ## Getting Started
 **Requirements** : run ```pip install -r requirements.txt```
 
-#### [Pre-processing](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/transform.py#L62-L84) : The specific process is descripted in the [notebook](pre-processing example.ipynb).
+#### [Pre-processing](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/transform.py#L62-L84) : The specific process is descripted in the [notebook](https://github.com/Yonsei-TAIL/KHD2020/blob/master/preprocessing_example.ipynb).
 1. Zero-padding to 300x600
 2. Windowing
 3. Background reduction
