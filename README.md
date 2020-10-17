@@ -1,6 +1,6 @@
 # Korea Health Datathon 2020 Sinusitis Classification Solution
 
-This repository is the 3rd place solution the sinusitis classifcation of [KHD2020](https://github.com/Korea-Health-Datathon/KHD2020) based on [sample code](https://github.com/KYBiMIL/KHD_2020).
+This repository is the 3rd place solution the sinusitis classification of [KHD2020](https://github.com/Korea-Health-Datathon/KHD2020) based on [sample code](https://github.com/KYBiMIL/KHD_2020).
 
 **NOTE** : It is unable to run this code on your local machine because the challenge was based on [NSML](https://ai.nsml.navercorp.com/intro) infrastructure and the dataset was private. You have to customize the [data_loader.py](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/data_loader.py) to run training code with your own dataset and specify the directory on [DATASET_PATH](https://github.com/Yonsei-TAIL/KHD2020/blob/master/utils/config.py#L8) argument.
 
